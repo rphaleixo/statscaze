@@ -18,6 +18,7 @@ export async function upsertVideoMetadata(db, row) {
         comentarios=excluded.comentarios,
         likes=excluded.likes,
         mensagens_chat=excluded.mensagens_chat,
+        thumbnail_url=COALESCE(excluded.thumbnail_url, thumbnail_url),
         coletado_em=excluded.coletado_em`
     )
     .bind(
