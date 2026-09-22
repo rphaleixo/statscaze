@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cazé TV — Mapeador de Vídeos</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h1>Cazé TV</h1>
+      <p class="subtitle">Mapeador de Vídeos</p>
+
+      <section>
+        <h2>Canal e período</h2>
+        <label>Canal (handle, sem @)
+          <input id="channelHandle" type="text" value="CazeTV" />
+        </label>
+        <label>Data inicial
+          <input id="dateFrom" type="date" />
+        </label>
+        <label>Data final
+          <input id="dateTo" type="date" />
+        </label>
+      </section>
+
+      <section>
+        <h2>Tipo de conteúdo</h2>
+        <label class="checkbox"><input type="checkbox" value="live" checked /> Live</label>
+        <label class="checkbox"><input type="checkbox" value="short" checked /> Short</label>
+        <label class="checkbox"><input type="checkbox" value="video" checked /> Vídeo normal</label>
+      </section>
+
+      <section>
+        <h2>Etapa 1 — Mapeamento</h2>
+        <p class="hint">Lista os vídeos do período e busca título, duração, views, comentários e chat.</p>
+        <button id="btnMapear" class="primary">Mapear vídeos</button>
+      </section>
+
+      <section>
+        <h2>Etapa 2 — Transcrição</h2>
+        <label class="checkbox"><input id="reprocessar" type="checkbox" /> Reprocessar já transcritos</label>
+        <button id="btnTranscrever" class="primary">Buscar transcrições</button>
+      </section>
+    </aside>
+
+    <main class="content">
+      <section id="execucao" class="execucao">
+        <div id="progressBar" class="progress-bar"><div class="progress-fill"></div></div>
+        <div id="progressText" class="progress-text"></div>
+        <pre id="logArea" class="log-area"></pre>
+      </section>
+
+      <nav class="tabs">
+        <button class="tab-btn active" data-tab="videos">Vídeos</button>
+        <button class="tab-btn" data-tab="dashboards">Dashboards</button>
+        <button class="tab-btn" data-tab="enriquecimento">Enriquecimento</button>
+      </nav>
+
+      <section id="tab-videos" class="tab-panel active">
+        <div class="panel-header">
+          <h3 id="videosCount">0 vídeo(s)</h3>
+          <div class="actions">
+            <a id="downloadCsv" href="#" class="button">Baixar CSV</a>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="videosTable">
+            <thead>
+              <tr>
+                <th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
+                <th>Views</th><th>Comentários</th><th>Chat</th><th>Competição</th>
+                <th>Elenco</th><th>Transcrição</th><th>Link</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-dashboards" class="tab-panel">
+        <div class="metrics" id="metrics"></div>
+        <div class="charts">
+          <div class="chart-card">
+            <h4>Vídeos por tipo de conteúdo</h4>
+            <div id="chartTipos" class="bar-chart"></div>
+          </div>
+          <div class="chart-card">
+            <h4>Top 10 vídeos por views</h4>
+            <div class="table-wrap">
+              <table id="top10Table">
+                <thead><tr><th>Título</th><th>Tipo</th><th>Duração</th><th>Views</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="chart-card">
+            <h4>Views somadas por competição</h4>
+            <div id="chartCompeticao" class="bar-chart"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-enriquecimento" class="tab-panel">
+        <p class="hint">
+          Preencha <strong>competição</strong> e <strong>elenco</strong> de cada vídeo — direto na
+          tabela abaixo (salva por vídeo).
+        </p>
+        <div class="table-wrap">
+          <table id="enrichTable">
+            <thead><tr><th>Título</th><th>Competição</th><th>Elenco (separado por vírgula)</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

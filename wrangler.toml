@@ -1,0 +1,25 @@
+name = "statscaze"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
+
+# Serve os arquivos de public/ para qualquer rota que não seja /api/*
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+# Preencha depois de criar o banco com:
+#   npx wrangler d1 create statscaze
+[[d1_databases]]
+binding = "DB"
+database_name = "statscaze"
+database_id = "COLOQUE_AQUI_O_ID_DO_BANCO"
+
+# Coleta automática diária (ajuste o horário se quiser). UTC.
+[triggers]
+crons = ["0 6 * * *"]
+
+[vars]
+CHANNEL_HANDLE = "CazeTV"
+
+# A chave da API do YouTube NÃO fica aqui — configure com:
+#   npx wrangler secret put YOUTUBE_API_KEY

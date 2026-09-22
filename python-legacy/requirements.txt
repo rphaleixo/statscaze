@@ -1,0 +1,6 @@
+streamlit
+pandas
+requests
+openpyxl
+youtube-transcript-api
+yt-dlp
