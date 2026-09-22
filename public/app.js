@@ -996,6 +996,7 @@ function sum(list, field) {
 
 // Views + curtidas + comentários + chat, tudo sobre views — normaliza
 // audiências diferentes pra comparar o quanto um vídeo/membro "engaja".
+const FORMULA_ENGAJAMENTO = "Engajamento = (curtidas + comentários + chat) ÷ views";
 function engajamento(g) {
   return g.views ? (g.likes + g.comentarios + g.chat) / g.views : 0;
 }
@@ -1088,7 +1089,14 @@ function agruparPor(videos, chaveFn) {
     g.chat += v.mensagens_chat || 0;
   }
   return Object.values(grupos)
-    .map((g) => ({ ...g, mediaViews: g.videos ? Math.round(g.views / g.videos) : 0, engajamento: engajamento(g) }))
+    .map((g) => ({
+      ...g,
+      mediaViews: g.videos ? Math.round(g.views / g.videos) : 0,
+      mediaLikes: g.videos ? Math.round(g.likes / g.videos) : 0,
+      mediaComentarios: g.videos ? Math.round(g.comentarios / g.videos) : 0,
+      mediaChat: g.videos ? Math.round(g.chat / g.videos) : 0,
+      engajamento: engajamento(g),
+    }))
     .sort((a, b) => b.views - a.views);
 }
 
@@ -1102,12 +1110,16 @@ function renderTabelaAgregada(selector, grupos) {
         <td>${g.views.toLocaleString("pt-BR")}</td>
         <td>${g.mediaViews.toLocaleString("pt-BR")}</td>
         <td>${g.likes.toLocaleString("pt-BR")}</td>
+        <td>${g.mediaLikes.toLocaleString("pt-BR")}</td>
         <td>${g.comentarios.toLocaleString("pt-BR")}</td>
+        <td>${g.mediaComentarios.toLocaleString("pt-BR")}</td>
+        <td>${g.chat.toLocaleString("pt-BR")}</td>
+        <td>${g.mediaChat.toLocaleString("pt-BR")}</td>
         <td>${formatPct(g.engajamento)}</td>
       </tr>`
         )
         .join("")
-    : `<tr><td colspan="7" class="hint">Sem dados nesse recorte.</td></tr>`;
+    : `<tr><td colspan="11" class="hint">Sem dados nesse recorte.</td></tr>`;
 }
 
 function renderDadosGerais(videos) {
@@ -1121,12 +1133,20 @@ function renderDadosGerais(videos) {
   }
 
   const comTranscricao = videos.filter((v) => v.transcricao_sucesso).length;
+  const totalEngajamento = engajamento({
+    views: sum(videos, "views"),
+    likes: sum(videos, "likes"),
+    comentarios: sum(videos, "comentarios"),
+    chat: sum(videos, "mensagens_chat"),
+  });
 
   metricsEl.innerHTML = `
     <div class="metric-card"><div class="value">${videos.length}</div><div class="label">Vídeos</div></div>
     <div class="metric-card"><div class="value">${sum(videos, "views").toLocaleString("pt-BR")}</div><div class="label">Views (soma)</div></div>
     <div class="metric-card"><div class="value">${sum(videos, "likes").toLocaleString("pt-BR")}</div><div class="label">Curtidas (soma)</div></div>
     <div class="metric-card"><div class="value">${sum(videos, "comentarios").toLocaleString("pt-BR")}</div><div class="label">Comentários (soma)</div></div>
+    <div class="metric-card"><div class="value">${sum(videos, "mensagens_chat").toLocaleString("pt-BR")}</div><div class="label">Chat (soma)</div></div>
+    <div class="metric-card" title="${escapeAttr(FORMULA_ENGAJAMENTO)}"><div class="value">${formatPct(totalEngajamento)}</div><div class="label">Engajamento</div></div>
     <div class="metric-card"><div class="value">${comTranscricao}/${videos.length}</div><div class="label">Com transcrição</div></div>
   `;
 
@@ -1588,7 +1608,15 @@ function renderCastRanking(videos) {
   }
 
   const linhas = Object.entries(porMembro)
-    .map(([nome, s]) => ({ nome, ...s, media: s.videos ? Math.round(s.views / s.videos) : 0, engajamento: engajamento(s) }))
+    .map(([nome, s]) => ({
+      nome,
+      ...s,
+      media: s.videos ? Math.round(s.views / s.videos) : 0,
+      mediaLikes: s.videos ? Math.round(s.likes / s.videos) : 0,
+      mediaComentarios: s.videos ? Math.round(s.comentarios / s.videos) : 0,
+      mediaChat: s.videos ? Math.round(s.chat / s.videos) : 0,
+      engajamento: engajamento(s),
+    }))
     .sort((a, b) => b.views - a.views);
 
   document.querySelector("#castRankingTable tbody").innerHTML = linhas.length
@@ -1599,13 +1627,16 @@ function renderCastRanking(videos) {
         <td>${l.views.toLocaleString("pt-BR")}</td>
         <td>${l.media.toLocaleString("pt-BR")}</td>
         <td>${l.likes.toLocaleString("pt-BR")}</td>
+        <td>${l.mediaLikes.toLocaleString("pt-BR")}</td>
         <td>${l.comentarios.toLocaleString("pt-BR")}</td>
+        <td>${l.mediaComentarios.toLocaleString("pt-BR")}</td>
         <td>${l.chat.toLocaleString("pt-BR")}</td>
+        <td>${l.mediaChat.toLocaleString("pt-BR")}</td>
         <td>${formatPct(l.engajamento)}</td>
       </tr>`
         )
         .join("")
-    : `<tr><td colspan="8" class="hint">Sem dados de elenco nesse recorte.</td></tr>`;
+    : `<tr><td colspan="11" class="hint">Sem dados de elenco nesse recorte.</td></tr>`;
 }
 
 function renderCastCombos(videos) {
@@ -1616,13 +1647,25 @@ function renderCastCombos(videos) {
     if (!participantes.length) continue;
 
     const combo = [...participantes].sort((a, b) => a.nome.localeCompare(b.nome)).map((p) => `${p.nome} (${PAPEIS[p.papel] || p.papel})`).join(" + ");
-    if (!porCombo[combo]) porCombo[combo] = { videos: 0, views: 0 };
-    porCombo[combo].videos++;
-    porCombo[combo].views += v.views || 0;
+    if (!porCombo[combo]) porCombo[combo] = { videos: 0, views: 0, likes: 0, comentarios: 0, chat: 0 };
+    const s = porCombo[combo];
+    s.videos++;
+    s.views += v.views || 0;
+    s.likes += v.likes || 0;
+    s.comentarios += v.comentarios || 0;
+    s.chat += v.mensagens_chat || 0;
   }
 
   const linhas = Object.entries(porCombo)
-    .map(([combo, s]) => ({ combo, ...s, media: s.videos ? Math.round(s.views / s.videos) : 0 }))
+    .map(([combo, s]) => ({
+      combo,
+      ...s,
+      media: s.videos ? Math.round(s.views / s.videos) : 0,
+      mediaLikes: s.videos ? Math.round(s.likes / s.videos) : 0,
+      mediaComentarios: s.videos ? Math.round(s.comentarios / s.videos) : 0,
+      mediaChat: s.videos ? Math.round(s.chat / s.videos) : 0,
+      engajamento: engajamento(s),
+    }))
     .sort((a, b) => b.views - a.views);
 
   document.querySelector("#castComboTable tbody").innerHTML = linhas.length
@@ -1632,10 +1675,17 @@ function renderCastCombos(videos) {
         <td class="wrap">${l.combo}</td><td>${l.videos}</td>
         <td>${l.views.toLocaleString("pt-BR")}</td>
         <td>${l.media.toLocaleString("pt-BR")}</td>
+        <td>${l.likes.toLocaleString("pt-BR")}</td>
+        <td>${l.mediaLikes.toLocaleString("pt-BR")}</td>
+        <td>${l.comentarios.toLocaleString("pt-BR")}</td>
+        <td>${l.mediaComentarios.toLocaleString("pt-BR")}</td>
+        <td>${l.chat.toLocaleString("pt-BR")}</td>
+        <td>${l.mediaChat.toLocaleString("pt-BR")}</td>
+        <td>${formatPct(l.engajamento)}</td>
       </tr>`
         )
         .join("")
-    : `<tr><td colspan="4" class="hint">Sem combinações de elenco nesse recorte.</td></tr>`;
+    : `<tr><td colspan="11" class="hint">Sem combinações de elenco nesse recorte.</td></tr>`;
 }
 
 function renderCastMemberDetail(videos) {
@@ -1696,13 +1746,17 @@ function metricasDeVideos(videos) {
   const likes = sum(videos, "likes");
   const comentarios = sum(videos, "comentarios");
   const chat = sum(videos, "mensagens_chat");
+  const qtd = videos.length;
   return {
-    qtd: videos.length,
+    qtd,
     views,
-    mediaViews: videos.length ? Math.round(views / videos.length) : 0,
+    mediaViews: qtd ? Math.round(views / qtd) : 0,
     likes,
+    mediaLikes: qtd ? Math.round(likes / qtd) : 0,
     comentarios,
+    mediaComentarios: qtd ? Math.round(comentarios / qtd) : 0,
     chat,
+    mediaChat: qtd ? Math.round(chat / qtd) : 0,
     engajamento: engajamento({ views, likes, comentarios, chat }),
   };
 }
@@ -1813,9 +1867,12 @@ function compararCenarios() {
     { label: "Views (soma)", chave: "views", formato: (v) => v.toLocaleString("pt-BR") },
     { label: "Views (média)", chave: "mediaViews", formato: (v) => v.toLocaleString("pt-BR") },
     { label: "Curtidas (soma)", chave: "likes", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Curtidas (média)", chave: "mediaLikes", formato: (v) => v.toLocaleString("pt-BR") },
     { label: "Comentários (soma)", chave: "comentarios", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Comentários (média)", chave: "mediaComentarios", formato: (v) => v.toLocaleString("pt-BR") },
     { label: "Chat (soma)", chave: "chat", formato: (v) => v.toLocaleString("pt-BR") },
-    { label: "Engajamento", chave: "engajamento", formato: formatPct },
+    { label: "Chat (média)", chave: "mediaChat", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Engajamento", chave: "engajamento", formato: formatPct, titulo: FORMULA_ENGAJAMENTO },
   ];
 
   const linhasHtml = linhasMetricas
@@ -1828,7 +1885,8 @@ function compararCenarios() {
           return `<td>${m.formato(valor)}${diffHtml}</td>`;
         })
         .join("");
-      return `<tr><td>${m.label}</td>${celulas}</tr>`;
+      const rotulo = m.titulo ? `<td title="${escapeAttr(m.titulo)}">${m.label}</td>` : `<td>${m.label}</td>`;
+      return `<tr>${rotulo}${celulas}</tr>`;
     })
     .join("");
 
@@ -1866,7 +1924,7 @@ function renderMelhorParceiro() {
   const membro = el("parceiroFiltroMembro").value;
   const tbody = document.querySelector("#melhorParceiroTable tbody");
   if (!membro) {
-    tbody.innerHTML = `<tr><td colspan="4" class="hint">Selecione um membro.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="hint">Selecione um membro.</td></tr>`;
     return;
   }
 
@@ -1888,12 +1946,17 @@ function renderMelhorParceiro() {
     ? linhas
         .map(
           (l) => `<tr>
-        <td>${l.parceiro}</td><td>${l.qtd}${l.qtd < 5 ? ' <span class="amostra-aviso baixa">(amostra pequena)</span>' : ""}</td>
-        <td>${l.mediaViews.toLocaleString("pt-BR")}</td><td>${formatPct(l.engajamento)}</td>
+        <td>${l.parceiro}</td>
+        <td>${l.qtd}${l.qtd < 5 ? ' <span class="amostra-aviso baixa">(amostra pequena)</span>' : ""}</td>
+        <td>${l.views.toLocaleString("pt-BR")}</td><td>${l.mediaViews.toLocaleString("pt-BR")}</td>
+        <td>${l.likes.toLocaleString("pt-BR")}</td><td>${l.mediaLikes.toLocaleString("pt-BR")}</td>
+        <td>${l.comentarios.toLocaleString("pt-BR")}</td><td>${l.mediaComentarios.toLocaleString("pt-BR")}</td>
+        <td>${l.chat.toLocaleString("pt-BR")}</td><td>${l.mediaChat.toLocaleString("pt-BR")}</td>
+        <td>${formatPct(l.engajamento)}</td>
       </tr>`
         )
         .join("")
-    : `<tr><td colspan="4" class="hint">Esse membro não apareceu com outras pessoas nesse recorte.</td></tr>`;
+    : `<tr><td colspan="11" class="hint">Esse membro não apareceu com outras pessoas nesse recorte.</td></tr>`;
 }
 
 function populatePapeisPorPessoaSelect() {
@@ -1907,7 +1970,7 @@ function renderPapeisPorPessoa() {
   const membro = el("papeisPorPessoaMembro").value;
   const tbody = document.querySelector("#papeisPorPessoaTable tbody");
   if (!membro) {
-    tbody.innerHTML = `<tr><td colspan="4" class="hint">Selecione um membro.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="11" class="hint">Selecione um membro.</td></tr>`;
     return;
   }
 
@@ -1929,12 +1992,17 @@ function renderPapeisPorPessoa() {
     ? linhas
         .map(
           (l) => `<tr>
-        <td>${PAPEIS[l.papel] || l.papel}</td><td>${l.qtd}${l.qtd < 5 ? ' <span class="amostra-aviso baixa">(amostra pequena)</span>' : ""}</td>
-        <td>${l.mediaViews.toLocaleString("pt-BR")}</td><td>${formatPct(l.engajamento)}</td>
+        <td>${PAPEIS[l.papel] || l.papel}</td>
+        <td>${l.qtd}${l.qtd < 5 ? ' <span class="amostra-aviso baixa">(amostra pequena)</span>' : ""}</td>
+        <td>${l.views.toLocaleString("pt-BR")}</td><td>${l.mediaViews.toLocaleString("pt-BR")}</td>
+        <td>${l.likes.toLocaleString("pt-BR")}</td><td>${l.mediaLikes.toLocaleString("pt-BR")}</td>
+        <td>${l.comentarios.toLocaleString("pt-BR")}</td><td>${l.mediaComentarios.toLocaleString("pt-BR")}</td>
+        <td>${l.chat.toLocaleString("pt-BR")}</td><td>${l.mediaChat.toLocaleString("pt-BR")}</td>
+        <td>${formatPct(l.engajamento)}</td>
       </tr>`
         )
         .join("")
-    : `<tr><td colspan="4" class="hint">Esse membro não tem participações nesse recorte.</td></tr>`;
+    : `<tr><td colspan="11" class="hint">Esse membro não tem participações nesse recorte.</td></tr>`;
 }
 
 el("parceiroFiltroMembro").addEventListener("change", renderMelhorParceiro);
