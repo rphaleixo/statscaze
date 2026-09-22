@@ -374,9 +374,13 @@ async function carregarVideos() {
 // os Dashboards sem depender de mapear vídeos reais.
 
 function atualizarBadgeModoTeste() {
-  el("modoDadosBadge").textContent = modoTeste ? "Modo: dados de teste (mocados)" : "Modo: dados reais";
+  const texto = modoTeste ? "Modo: dados de teste (mocados)" : "Modo: dados reais";
+  el("modoDadosBadge").textContent = texto;
+  el("modoDadosBadgeDash").textContent = texto;
   el("btnUsarDadosTeste").style.display = modoTeste ? "none" : "";
   el("btnVoltarDadosReais").style.display = modoTeste ? "" : "none";
+  el("btnUsarDadosTesteDash").style.display = modoTeste ? "none" : "";
+  el("btnVoltarDadosReaisDash").style.display = modoTeste ? "" : "none";
 }
 
 function gerarVideosMock(quantidade = 40) {
@@ -452,22 +456,32 @@ function gerarVideosMock(quantidade = 40) {
   return videos;
 }
 
-el("btnUsarDadosTeste").addEventListener("click", () => {
+function ativarDadosTeste() {
   const mock = gerarVideosMock();
   if (!mock) return;
 
   modoTeste = true;
   videosCache = mock;
+  // Limpa filtros ativos antes de trocar os dados: um filtro que fazia
+  // sentido nos dados reais (ex.: uma competição específica) pode não
+  // existir nos vídeos mocados e deixaria a tela parecendo vazia.
+  limparFiltrosVideos();
+  limparFiltrosDash();
   atualizarBadgeModoTeste();
   renderVideosTable();
   renderDashboards();
   renderPessoasStats();
   renderAprovacaoIA();
-});
+}
 
-el("btnVoltarDadosReais").addEventListener("click", async () => {
+async function desativarDadosTeste() {
   await carregarVideos();
-});
+}
+
+el("btnUsarDadosTeste").addEventListener("click", ativarDadosTeste);
+el("btnVoltarDadosReais").addEventListener("click", desativarDadosTeste);
+el("btnUsarDadosTesteDash").addEventListener("click", ativarDadosTeste);
+el("btnVoltarDadosReaisDash").addEventListener("click", desativarDadosTeste);
 
 async function carregarPessoas() {
   const res = await fetch("/api/pessoas").then((r) => r.json());
@@ -618,11 +632,14 @@ document.querySelectorAll("#videosTable th[data-sort]").forEach((th) => {
 ["videosFiltroTipoVideo", "videosFiltroTipoConteudo", "videosFiltroCompeticao", "videosFiltroPrograma"].forEach((id) =>
   el(id).addEventListener("change", renderVideosTable)
 );
-el("btnLimparFiltrosVideos").addEventListener("click", () => {
+function limparFiltrosVideos() {
   el("videosFiltroTitulo").value = "";
   ["videosFiltroTipoVideo", "videosFiltroTipoConteudo", "videosFiltroCompeticao", "videosFiltroPrograma"].forEach((id) => {
     el(id).value = "";
   });
+}
+el("btnLimparFiltrosVideos").addEventListener("click", () => {
+  limparFiltrosVideos();
   renderVideosTable();
 });
 
@@ -1201,13 +1218,16 @@ function renderDashboards() {
 ["dashFiltroDuracaoMin", "dashFiltroDuracaoMax", "dashFiltroDataDe", "dashFiltroDataAte"].forEach((id) => {
   el(id).addEventListener("change", renderDashboards);
 });
-el("btnLimparFiltrosDash").addEventListener("click", () => {
+function limparFiltrosDash() {
   ["dashFiltroCompeticao", "dashFiltroPrograma", "dashFiltroTipoVideo", "dashFiltroElenco", "dashFiltroPapel"].forEach((id) => {
     Array.from(el(id).options).forEach((o) => { o.selected = false; });
   });
   ["dashFiltroDuracaoMin", "dashFiltroDuracaoMax", "dashFiltroDataDe", "dashFiltroDataAte"].forEach((id) => {
     el(id).value = "";
   });
+}
+el("btnLimparFiltrosDash").addEventListener("click", () => {
+  limparFiltrosDash();
   renderDashboards();
 });
 
