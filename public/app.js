@@ -28,10 +28,9 @@ function formatDuration(totalSeconds) {
   return h ? `${h}h${String(m).padStart(2, "0")}m` : `${m}m${String(s).padStart(2, "0")}s`;
 }
 
-function papelOptionsHtml(selected, papeisPermitidos) {
-  const chaves = papeisPermitidos || Object.keys(PAPEIS);
-  return chaves
-    .map((valor) => `<option value="${valor}"${valor === selected ? " selected" : ""}>${PAPEIS[valor]}</option>`)
+function papelOptionsHtml(selected) {
+  return Object.entries(PAPEIS)
+    .map(([valor, label]) => `<option value="${valor}"${valor === selected ? " selected" : ""}>${label}</option>`)
     .join("");
 }
 
@@ -41,25 +40,6 @@ function tipoConteudoOptionsHtml(selected) {
     visiveis
       .map((t) => `<option value="${escapeAttr(t.nome)}"${t.nome === selected ? " selected" : ""}>${t.nome}${t.arquivado ? " (arquivado)" : ""}</option>`)
       .join("");
-}
-
-function papeisPermitidosPorTipoConteudo(nomeTipoConteudo) {
-  const tipo = tiposConteudoCache.find((t) => t.nome === nomeTipoConteudo);
-  return tipo?.papeis_permitidos?.length ? tipo.papeis_permitidos : Object.keys(PAPEIS);
-}
-
-function papeisCheckboxesHtml(idPrefix, selecionados) {
-  const marcados = new Set(selecionados || []);
-  return Object.entries(PAPEIS)
-    .map(
-      ([valor, label]) => `
-      <label><input type="checkbox" data-papel-checkbox="${idPrefix}" value="${valor}"${marcados.has(valor) ? " checked" : ""}/> ${label}</label>`
-    )
-    .join("");
-}
-
-function papeisMarcados(container, idPrefix) {
-  return Array.from(container.querySelectorAll(`[data-papel-checkbox="${idPrefix}"]:checked`)).map((cb) => cb.value);
 }
 
 // ---------- progresso / log / interrupção ----------
@@ -370,6 +350,7 @@ async function carregarVideos() {
   el("downloadCsv").href = `/api/export.csv?${params}`;
   renderVideosTable();
   renderDashboards();
+  renderPessoasStats();
 }
 
 async function carregarPessoas() {
@@ -391,6 +372,7 @@ async function carregarTiposConteudo() {
   tiposConteudoCache = res.tipos || [];
   renderTiposConteudoTable();
   renderVideosTable();
+  renderPessoasStats();
 }
 
 function getOrCreateDatalist(id) {
@@ -463,7 +445,7 @@ function criarLinhaVideo(v) {
     <td>${v.views ?? ""}</td>
     <td>${v.comentarios ?? ""}</td>
     <td>${v.mensagens_chat ?? ""}</td>
-    <td>${v.transcricao_sucesso ? "✓" : ""}</td>
+    <td class="transcricao-cell">${v.transcricao_sucesso ? "✓" : ""}</td>
     <td><a href="${v.url}" target="_blank" rel="noopener">abrir</a></td>
     <td>
       <select data-field="tipoConteudo">${tipoConteudoOptionsHtml(v.tipo_conteudo)}</select>
@@ -480,7 +462,11 @@ function criarLinhaVideo(v) {
         <button type="button" class="add-participante">+</button>
       </div>
     </td>
-    <td><button class="save-row">Salvar</button></td>
+    <td class="acoes-video-cell">
+      <button class="save-row buscar-transcricao-row" type="button">Transcrição</button>
+      <button class="save-row sugerir-elenco-row" type="button">Sugerir elenco (IA)</button>
+      <button class="save-row salvar-video-row">Salvar</button>
+    </td>
   `;
 
   const pillsEl = tr.querySelector(".elenco-pills");
@@ -489,16 +475,9 @@ function criarLinhaVideo(v) {
   const competicaoInput = tr.querySelector('[data-field="competicao"]');
   const programaInput = tr.querySelector('[data-field="programa"]');
   const novoPapelSelect = tr.querySelector('[data-field="novoPapel"]');
+  const transcricaoCell = tr.querySelector(".transcricao-cell");
 
-  function papeisPermitidosAtual() {
-    return papeisPermitidosPorTipoConteudo(tipoConteudoSelect.value);
-  }
-
-  function atualizarPapeisDisponiveis() {
-    novoPapelSelect.innerHTML = papelOptionsHtml(undefined, papeisPermitidosAtual());
-  }
-  atualizarPapeisDisponiveis();
-  tipoConteudoSelect.addEventListener("change", atualizarPapeisDisponiveis);
+  novoPapelSelect.innerHTML = papelOptionsHtml();
 
   function renderSugestoesParticipantes() {
     sugestoesEl.innerHTML = participantesSugeridos.length
@@ -560,11 +539,73 @@ function criarLinhaVideo(v) {
       if (v.tipo_conteudo_sugerido) tipoConteudoSelect.value = v.tipo_conteudo_sugerido;
       if (v.competicao_sugerida) competicaoInput.value = v.competicao_sugerida;
       if (v.programa_sugerido) programaInput.value = v.programa_sugerido;
-      atualizarPapeisDisponiveis();
     });
   }
 
-  tr.querySelector(".save-row").addEventListener("click", async () => {
+  tr.querySelector(".buscar-transcricao-row").addEventListener("click", async (event) => {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Buscando...";
+
+    try {
+      const res = await fetch("/api/transcripts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoIds: [v.video_id] }),
+      }).then((r) => r.json());
+      if (res.error) throw new Error(res.error);
+
+      const item = res.results?.[0];
+      v.transcricao_sucesso = item?.sucesso ? 1 : 0;
+      transcricaoCell.textContent = v.transcricao_sucesso ? "✓" : "";
+      if (!item?.sucesso && item?.erro) alert(`Não foi possível buscar a transcrição: ${item.erro}`);
+    } catch (error) {
+      alert(`Erro ao buscar transcrição: ${error.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Transcrição";
+    }
+  });
+
+  tr.querySelector(".sugerir-elenco-row").addEventListener("click", async (event) => {
+    const btn = event.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Sugerindo...";
+
+    try {
+      const res = await fetch("/api/ai/sugerir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ videoIds: [v.video_id] }),
+      }).then((r) => r.json());
+      if (res.error) throw new Error(res.error);
+
+      const item = res.results?.[0];
+      if (item) {
+        v.tipo_conteudo_sugerido = item.tipo_conteudo_sugerido;
+        v.competicao_sugerida = item.competicao_sugerida;
+        v.programa_sugerido = item.programa_sugerido;
+        v.competicao_confianca = item.confianca;
+        if (item.participantes_sugeridos?.length) {
+          sugestoesParticipantesPorVideo[v.video_id] = item.participantes_sugeridos;
+        } else {
+          delete sugestoesParticipantesPorVideo[v.video_id];
+        }
+        if (!item.tipo_conteudo_sugerido && !item.competicao_sugerida && !item.programa_sugerido && !item.participantes_sugeridos?.length) {
+          alert(`A IA não encontrou sugestão para este vídeo${item.erro ? `: ${item.erro}` : "."}`);
+        }
+      }
+
+      const novaLinha = criarLinhaVideo(v);
+      tr.replaceWith(novaLinha);
+    } catch (error) {
+      alert(`Erro ao pedir sugestão à IA: ${error.message}`);
+      btn.disabled = false;
+      btn.textContent = "Sugerir elenco (IA)";
+    }
+  });
+
+  tr.querySelector(".salvar-video-row").addEventListener("click", async () => {
     const competicao = competicaoInput.value.trim();
     const programa = programaInput.value.trim();
     const tipoConteudo = tipoConteudoSelect.value;
@@ -674,7 +715,6 @@ function renderPessoasTable() {
       <tr>
         <td><input type="text" value="${escapeAttr(p.nome)}" data-pessoa-nome="${p.id}" /></td>
         <td><input type="text" value="${escapeAttr((p.apelidos || []).join(", "))}" data-pessoa-apelidos="${p.id}" /></td>
-        <td><div class="papeis-checkboxes">${papeisCheckboxesHtml(`pessoa-${p.id}`, p.papeis_padrao)}</div></td>
         <td>
           <button class="save-row" data-salvar-pessoa="${p.id}">Salvar</button>
           <button class="save-row" data-excluir-pessoa="${p.id}">Excluir</button>
@@ -688,12 +728,11 @@ function renderPessoasTable() {
       const id = btn.dataset.salvarPessoa;
       const nome = tbody.querySelector(`[data-pessoa-nome="${id}"]`).value.trim();
       const apelidos = tbody.querySelector(`[data-pessoa-apelidos="${id}"]`).value.split(",").map((s) => s.trim()).filter(Boolean);
-      const papeis = papeisMarcados(tbody, `pessoa-${id}`);
 
       await fetch("/api/pessoas/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: Number(id), nome, apelidos, papeis_padrao: papeis }),
+        body: JSON.stringify({ id: Number(id), nome, apelidos }),
       });
       await carregarPessoas();
     });
@@ -722,24 +761,77 @@ function renderPessoasDatalist() {
     .join("");
 }
 
-el("novaPessoaPapeis").innerHTML = papeisCheckboxesHtml("nova-pessoa", []);
-
 el("btnAdicionarPessoa").addEventListener("click", async () => {
   const nome = el("novaPessoaNome").value.trim();
   const apelidos = el("novaPessoaApelidos").value.split(",").map((s) => s.trim()).filter(Boolean);
-  const papeis = papeisMarcados(document, "nova-pessoa");
   if (!nome) return;
 
   await fetch("/api/pessoas", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nome, apelidos, papeis_padrao: papeis }),
+    body: JSON.stringify({ nome, apelidos }),
   });
 
   el("novaPessoaNome").value = "";
   el("novaPessoaApelidos").value = "";
-  document.querySelectorAll('[data-papel-checkbox="nova-pessoa"]').forEach((cb) => { cb.checked = false; });
   await carregarPessoas();
+});
+
+// Quantas vezes cada membro apareceu em cada papel, considerando os vídeos
+// já carregados (período/tipo de vídeo da aba Mapeamento) e os filtros de
+// tipo de conteúdo/competição desta aba.
+function populateElencoFilters() {
+  const tipoSelect = el("elencoFiltroTipoConteudo");
+  const competicaoSelect = el("elencoFiltroCompeticao");
+  const prevTipo = tipoSelect.value;
+  const prevCompeticao = competicaoSelect.value;
+
+  const tiposAtivos = tiposConteudoCache.filter((t) => !t.arquivado);
+  tipoSelect.innerHTML = '<option value="">Todos</option>' +
+    tiposAtivos.map((t) => `<option value="${escapeAttr(t.nome)}">${t.nome}</option>`).join("");
+
+  const competicoes = new Set();
+  for (const v of videosCache) { if (v.competicao) competicoes.add(v.competicao); }
+  competicaoSelect.innerHTML = '<option value="">Todas</option>' +
+    [...competicoes].sort((a, b) => a.localeCompare(b)).map((c) => `<option value="${escapeAttr(c)}">${c}</option>`).join("");
+
+  if (tiposAtivos.some((t) => t.nome === prevTipo)) tipoSelect.value = prevTipo;
+  if (competicoes.has(prevCompeticao)) competicaoSelect.value = prevCompeticao;
+}
+
+function renderPessoasStats() {
+  populateElencoFilters();
+
+  const tipoFiltro = el("elencoFiltroTipoConteudo").value;
+  const competicaoFiltro = el("elencoFiltroCompeticao").value;
+  const videosFiltrados = videosCache.filter(
+    (v) => (!tipoFiltro || v.tipo_conteudo === tipoFiltro) && (!competicaoFiltro || v.competicao === competicaoFiltro)
+  );
+
+  const porPessoa = {};
+  for (const v of videosFiltrados) {
+    for (const p of v.participacoes || []) {
+      if (!porPessoa[p.nome]) porPessoa[p.nome] = {};
+      porPessoa[p.nome][p.papel] = (porPessoa[p.nome][p.papel] || 0) + 1;
+    }
+  }
+
+  const papeisKeys = Object.keys(PAPEIS);
+  el("pessoasStatsHeader").innerHTML = "<th>Membro</th>" + papeisKeys.map((k) => `<th>${PAPEIS[k]}</th>`).join("") + "<th>Total</th>";
+
+  const linhas = Object.entries(porPessoa)
+    .map(([nome, porPapel]) => ({ nome, porPapel, total: papeisKeys.reduce((sum, k) => sum + (porPapel[k] || 0), 0) }))
+    .sort((a, b) => b.total - a.total);
+
+  document.querySelector("#pessoasStatsTable tbody").innerHTML = linhas
+    .map(
+      (l) => `<tr><td>${l.nome}</td>${papeisKeys.map((k) => `<td>${l.porPapel[k] || 0}</td>`).join("")}<td>${l.total}</td></tr>`
+    )
+    .join("") || `<tr><td colspan="${papeisKeys.length + 2}" class="hint">Sem participações nesse recorte.</td></tr>`;
+}
+
+["elencoFiltroTipoConteudo", "elencoFiltroCompeticao"].forEach((id) => {
+  el(id).addEventListener("change", renderPessoasStats);
 });
 
 // ---------- aba Competições ----------
@@ -816,7 +908,6 @@ function renderTiposConteudoTable() {
       (t) => `
       <tr>
         <td>${t.nome}</td>
-        <td>${(t.papeis_permitidos?.length ? t.papeis_permitidos.map((p) => PAPEIS[p] || p) : ["(qualquer papel)"]).join(", ")}</td>
         <td>${t.arquivado ? "Arquivado" : "Ativo"}</td>
         <td><button class="save-row" data-arquivar-tipo="${t.id}" data-arquivado="${t.arquivado ? 0 : 1}">${t.arquivado ? "Restaurar" : "Arquivar"}</button></td>
       </tr>`
@@ -835,21 +926,17 @@ function renderTiposConteudoTable() {
   });
 }
 
-el("novoTipoConteudoPapeis").innerHTML = papeisCheckboxesHtml("novo-tipo-conteudo", []);
-
 el("btnAdicionarTipoConteudo").addEventListener("click", async () => {
   const nome = el("novoTipoConteudoNome").value.trim();
-  const papeis = papeisMarcados(document, "novo-tipo-conteudo");
   if (!nome) return;
 
   await fetch("/api/tipos-conteudo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nome, papeis_permitidos: papeis }),
+    body: JSON.stringify({ nome }),
   });
 
   el("novoTipoConteudoNome").value = "";
-  document.querySelectorAll('[data-papel-checkbox="novo-tipo-conteudo"]').forEach((cb) => { cb.checked = false; });
   await carregarTiposConteudo();
 });
 

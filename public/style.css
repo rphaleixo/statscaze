@@ -179,6 +179,7 @@ td input[type="text"] {
   font-size: 13px;
 }
 td button.save-row { width: auto; padding: 4px 10px; font-size: 12px; }
+.acoes-video-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 
 @media (max-width: 800px) {
   .layout { flex-direction: column; }

@@ -189,35 +189,25 @@ export async function deleteCompeticaoCadastrada(db, id) {
 
 // ---------- tipos de conteúdo (lista editável, com arquivamento) ----------
 
-function parseTipoConteudoRow(row) {
-  return { ...row, papeis_permitidos: row.papeis_permitidos ? parseJsonArray(row.papeis_permitidos) : null };
-}
-
 // incluirArquivados=false (padrão) é o que deve alimentar o menu da aba
 // Vídeos — uma opção arquivada nunca aparece lá, mas continua existindo
 // para os vídeos que já foram classificados com ela.
 export async function listTiposConteudo(db, { incluirArquivados = true } = {}) {
   const where = incluirArquivados ? "" : "WHERE arquivado = 0";
   const result = await db.prepare(`SELECT * FROM tipos_conteudo ${where} ORDER BY nome`).all();
-  return result.results.map(parseTipoConteudoRow);
+  return result.results;
 }
 
-export async function createTipoConteudo(db, nome, papeisPermitidos) {
+export async function createTipoConteudo(db, nome) {
   const result = await db
-    .prepare(`INSERT INTO tipos_conteudo (nome, papeis_permitidos, arquivado, criado_em) VALUES (?, ?, 0, ?) ON CONFLICT(nome) DO NOTHING`)
-    .bind(nome.trim(), papeisPermitidos?.length ? JSON.stringify(papeisPermitidos) : null, new Date().toISOString())
+    .prepare(`INSERT INTO tipos_conteudo (nome, arquivado, criado_em) VALUES (?, 0, ?) ON CONFLICT(nome) DO NOTHING`)
+    .bind(nome.trim(), new Date().toISOString())
     .run();
   return result.meta.last_row_id;
 }
 
 export async function arquivarTipoConteudo(db, id, arquivado) {
   await db.prepare(`UPDATE tipos_conteudo SET arquivado = ? WHERE id = ?`).bind(arquivado ? 1 : 0, id).run();
-}
-
-export async function getPapeisPermitidosPorTipoConteudo(db, nomeTipoConteudo) {
-  if (!nomeTipoConteudo) return null;
-  const row = await db.prepare(`SELECT papeis_permitidos FROM tipos_conteudo WHERE nome = ?`).bind(nomeTipoConteudo).first();
-  return row?.papeis_permitidos ? parseJsonArray(row.papeis_permitidos) : null;
 }
 
 // ---------- participações (elenco por vídeo) ----------

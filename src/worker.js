@@ -30,7 +30,6 @@ import {
   listTiposConteudo,
   createTipoConteudo,
   arquivarTipoConteudo,
-  getPapeisPermitidosPorTipoConteudo,
 } from "./db.js";
 import { sugerirClassificacao } from "./ai.js";
 
@@ -199,16 +198,6 @@ async function handleExportCsv(url, env) {
   });
 }
 
-// Filtra participações para só manter papéis compatíveis com o tipo de
-// conteúdo do vídeo, segundo o cadastro em tipos_conteudo (papeis_permitidos).
-// Sem restrição cadastrada para o tipo (ou sem tipo de conteúdo definido),
-// não filtra nada.
-async function filtrarPapeisPermitidos(env, participacoes, tipoConteudo) {
-  const permitidos = await getPapeisPermitidosPorTipoConteudo(env.DB, tipoConteudo);
-  if (!permitidos) return participacoes;
-  return participacoes.filter((p) => permitidos.includes(p.papel));
-}
-
 // body: { video_id, competicao, programa, tipo_conteudo, participacoes: [{ nome, papel }] }
 async function handleEnrich(request, env) {
   const body = await request.json();
@@ -218,7 +207,7 @@ async function handleEnrich(request, env) {
 
   await updateClassificacao(env.DB, videoId, { competicao, programa, tipoConteudo });
   if (Array.isArray(participacoes)) {
-    await setParticipacoes(env.DB, videoId, await filtrarPapeisPermitidos(env, participacoes, tipoConteudo));
+    await setParticipacoes(env.DB, videoId, participacoes);
   }
 
   return json({ ok: true });
@@ -313,8 +302,7 @@ async function handleEnrichImport(request, env) {
       await updateClassificacao(env.DB, videoId, entry);
     }
     if (entry.participacoes.length) {
-      const tipoConteudoEfetivo = entry.tipoConteudo || existing.tipo_conteudo;
-      await setParticipacoes(env.DB, videoId, await filtrarPapeisPermitidos(env, entry.participacoes, tipoConteudoEfetivo));
+      await setParticipacoes(env.DB, videoId, entry.participacoes);
     }
     atualizados++;
   }
@@ -396,12 +384,12 @@ async function handleListTiposConteudo(env) {
   return json({ tipos, papeis: PAPEIS });
 }
 
-// body: { nome, papeis_permitidos: ["comentarista", ...] ou [] para "qualquer papel" }
+// body: { nome }
 async function handleCreateTipoConteudo(request, env) {
   const body = await request.json();
   if (!body.nome?.trim()) return json({ error: "nome é obrigatório." }, 400);
 
-  const id = await createTipoConteudo(env.DB, body.nome, body.papeis_permitidos);
+  const id = await createTipoConteudo(env.DB, body.nome);
   return json({ id });
 }
 
@@ -427,7 +415,7 @@ async function handleAiSugerir(request, env) {
   const programasConhecidas = await getProgramasConhecidos(env.DB);
   const pessoasConhecidas = await listPessoas(env.DB);
   const tiposConteudoConhecidos = (await listTiposConteudo(env.DB, { incluirArquivados: false }))
-    .map((t) => ({ nome: t.nome, papeisPermitidos: t.papeis_permitidos }));
+    .map((t) => t.nome);
   const titles = await getVideoTitlesUrls(env.DB, videoIds);
   const rows = await env.DB
     .prepare(`SELECT video_id, titulo, descricao, transcricao_completa FROM videos WHERE video_id IN (${videoIds.map(() => "?").join(",")})`)

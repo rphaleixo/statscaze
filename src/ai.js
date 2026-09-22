@@ -15,10 +15,16 @@ function truncar(texto, max) {
   return texto.length > max ? `${texto.slice(0, max)}...` : texto;
 }
 
-// Extrai o primeiro objeto JSON de um texto, tolerando prosa ao redor
-// (modelos de instrução às vezes respondem "Aqui está: {...}").
-function extrairJson(texto) {
-  const match = texto?.match(/\{[\s\S]*\}/);
+// Extrai o primeiro objeto JSON de uma resposta da Workers AI. Alguns
+// modelos já devolvem `response` como objeto pronto (json mode) em vez de
+// string — nesse caso usamos o objeto direto. Quando vem como string,
+// toleramos prosa ao redor ("Aqui está: {...}").
+function extrairJson(valor) {
+  if (valor == null) return null;
+  if (typeof valor === "object") return valor;
+
+  const texto = String(valor);
+  const match = texto.match(/\{[\s\S]*\}/);
   if (!match) return null;
 
   try {
@@ -50,10 +56,8 @@ export async function sugerirClassificacao(
     }
   }
 
-  const tiposConteudoLower = new Map((tiposConteudoConhecidos || []).map((t) => [t.nome.toLowerCase(), t.nome]));
-  const listaTiposConteudo = (tiposConteudoConhecidos || [])
-    .map((t) => (t.papeisPermitidos?.length ? `${t.nome} (papéis: ${t.papeisPermitidos.join(", ")})` : t.nome))
-    .join(", ");
+  const tiposConteudoLower = new Map((tiposConteudoConhecidos || []).map((nome) => [nome.toLowerCase(), nome]));
+  const listaTiposConteudo = (tiposConteudoConhecidos || []).join(", ");
 
   const prompt = `Você analisa um vídeo de um canal de TV/YouTube esportivo a partir do título, descrição e um trecho da transcrição, e devolve uma classificação em JSON.
 

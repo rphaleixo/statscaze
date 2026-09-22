@@ -120,7 +120,7 @@
                 <th>Thumb</th><th>ID (YouTube)</th><th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
                 <th>Views</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
                 <th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
-                <th>Elenco do vídeo</th><th></th>
+                <th>Elenco do vídeo</th><th>Ações</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -131,21 +131,42 @@
       <section id="tab-elenco" class="tab-panel">
         <p class="hint">
           Cadastre aqui as pessoas que podem aparecer nos vídeos. Apelidos/outras grafias ajudam a
-          IA (e a busca) a reconhecer que é a mesma pessoa, evitando cadastro duplicado. Os papéis
-          marcados aqui são só um padrão sugerido — o papel de cada participação é sempre definido
-          por vídeo, na aba "Vídeos" (a mesma pessoa pode ter papéis diferentes em vídeos diferentes).
+          IA (e a busca) a reconhecer que é a mesma pessoa, evitando cadastro duplicado. O papel de
+          cada participação é sempre definido por vídeo, na aba "Vídeos" (a mesma pessoa pode ter
+          papéis diferentes em vídeos diferentes).
         </p>
 
         <div class="pessoa-form">
           <input id="novaPessoaNome" type="text" placeholder="Nome" />
           <input id="novaPessoaApelidos" type="text" placeholder="Apelidos (separados por vírgula)" />
-          <div class="papeis-checkboxes" id="novaPessoaPapeis"></div>
           <button id="btnAdicionarPessoa" class="primary">Adicionar</button>
         </div>
 
         <div class="table-wrap">
           <table id="pessoasTable">
-            <thead><tr><th>Nome</th><th>Apelidos</th><th>Papéis padrão (sugestão)</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>Apelidos</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <h4>Estatísticas de participação</h4>
+        <p class="hint">
+          Quantas vezes cada membro apareceu em cada papel (considerando o período e tipo de vídeo
+          selecionados na aba Mapeamento). Filtre por tipo de conteúdo ou competição para refinar.
+        </p>
+
+        <div class="cast-filters">
+          <label>Tipo de conteúdo
+            <select id="elencoFiltroTipoConteudo"><option value="">Todos</option></select>
+          </label>
+          <label>Competição
+            <select id="elencoFiltroCompeticao"><option value="">Todas</option></select>
+          </label>
+        </div>
+
+        <div class="table-wrap">
+          <table id="pessoasStatsTable">
+            <thead><tr id="pessoasStatsHeader"></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -180,13 +201,12 @@
 
         <div class="pessoa-form">
           <input id="novoTipoConteudoNome" type="text" placeholder="Nome do tipo de conteúdo" />
-          <div class="papeis-checkboxes" id="novoTipoConteudoPapeis"></div>
           <button id="btnAdicionarTipoConteudo" class="primary">Adicionar</button>
         </div>
 
         <div class="table-wrap">
           <table id="tiposConteudoTable">
-            <thead><tr><th>Nome</th><th>Papéis permitidos</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
