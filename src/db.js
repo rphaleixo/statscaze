@@ -58,16 +58,27 @@ export async function updateVideoTranscript(db, videoId, fields) {
     .run();
 }
 
+// elenco: { narrador, comentaristas: [até 5 nomes] }
 export async function updateEnrichment(db, videoId, competicao, elenco) {
+  const comentaristas = (elenco?.comentaristas || []).slice(0, 5);
+
   await db
     .prepare(
       `UPDATE videos
-       SET competicao = ?, elenco = ?, enriquecido_em = ?
+       SET competicao = ?, narrador = ?,
+           comentarista_1 = ?, comentarista_2 = ?, comentarista_3 = ?,
+           comentarista_4 = ?, comentarista_5 = ?,
+           enriquecido_em = ?
        WHERE video_id = ?`
     )
     .bind(
       competicao || null,
-      elenco && elenco.length ? JSON.stringify(elenco) : null,
+      elenco?.narrador || null,
+      comentaristas[0] || null,
+      comentaristas[1] || null,
+      comentaristas[2] || null,
+      comentaristas[3] || null,
+      comentaristas[4] || null,
       new Date().toISOString(),
       videoId
     )
@@ -101,10 +112,23 @@ export async function getVideos(db, { dateFrom, dateTo, contentTypes } = {}) {
   const stmt = db.prepare(`SELECT * FROM videos ${where} ORDER BY data_publicacao DESC`);
   const result = await stmt.bind(...params).all();
 
-  return result.results.map((row) => ({
-    ...row,
-    elenco: row.elenco ? JSON.parse(row.elenco) : [],
-  }));
+  return result.results.map(addElencoFields);
+}
+
+// Deriva campos convenientes para o frontend a partir de
+// narrador + comentarista_1..5: lista do elenco e uma chave de combinação
+// (mesmo conjunto de pessoas, ordem alfabética) para agrupar vídeos que têm
+// exatamente a mesma escalação.
+function addElencoFields(row) {
+  const comentaristas = [
+    row.comentarista_1, row.comentarista_2, row.comentarista_3,
+    row.comentarista_4, row.comentarista_5,
+  ].filter(Boolean);
+
+  const elenco = [row.narrador, ...comentaristas].filter(Boolean);
+  const combinacao = [...elenco].sort((a, b) => a.localeCompare(b)).join(" + ");
+
+  return { ...row, comentaristas, elenco, combinacao_elenco: combinacao || null };
 }
 
 export async function getVideoIdsPendingTranscript(db, { dateFrom, dateTo, contentTypes } = {}) {

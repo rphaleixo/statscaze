@@ -40,7 +40,7 @@ label { display: block; font-size: 13px; margin-bottom: 10px; }
 label.checkbox { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 label.checkbox input { width: auto; }
 
-input[type="text"], input[type="date"] {
+input[type="text"], input[type="date"], select {
   width: 100%;
   padding: 8px;
   margin-top: 4px;
@@ -131,6 +131,12 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .status-msg { font-size: 13px; padding: 8px 0; }
 .status-msg.error { color: var(--danger); }
 .status-msg.success { color: var(--success); }
+
+.cast-card { margin-top: 16px; grid-column: 1 / -1; }
+.cast-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.cast-filters label { font-size: 13px; margin-bottom: 0; }
+.chart-card h5 { font-size: 13px; color: var(--text-muted); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .03em; }
+code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
 td input[type="text"] {
   width: 100%;

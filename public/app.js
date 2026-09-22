@@ -266,6 +266,9 @@ function renderDashboards() {
     el("chartTipos").innerHTML = "";
     el("chartCompeticao").innerHTML = "";
     document.querySelector("#top10Table tbody").innerHTML = "";
+    document.querySelector("#castRankingTable tbody").innerHTML = "";
+    document.querySelector("#castComboTable tbody").innerHTML = "";
+    el("castMemberDetail").innerHTML = "";
     return;
   }
 
@@ -307,9 +310,13 @@ function renderDashboards() {
   const entriesCompeticao = Object.entries(porCompeticao).map(([label, value]) => ({ label, value }));
   el("chartCompeticao").innerHTML = entriesCompeticao.length
     ? ""
-    : `<p class="hint">Nenhum vídeo tem competição identificada ainda.</p>`;
+    : `<p class="hint">Nenhum vídeo tem competição/programa identificado ainda.</p>`;
   if (entriesCompeticao.length) renderBarChart(el("chartCompeticao"), entriesCompeticao);
+
+  renderCastDashboard();
 }
+
+const escapeAttr = (s) => (s || "").replace(/"/g, "&quot;");
 
 function renderEnrichTable() {
   const tbody = document.querySelector("#enrichTable tbody");
@@ -317,31 +324,41 @@ function renderEnrichTable() {
 
   for (const v of videosCache) {
     const tr = document.createElement("tr");
-    const elencoStr = (v.elenco || []).join(", ");
+    const c = v.comentaristas || [];
 
     tr.innerHTML = `
       <td class="wrap">${v.titulo || ""}</td>
-      <td><input type="text" value="${(v.competicao || "").replace(/"/g, "&quot;")}" data-field="competicao" /></td>
-      <td><input type="text" value="${elencoStr.replace(/"/g, "&quot;")}" data-field="elenco" /></td>
+      <td><input type="text" value="${escapeAttr(v.competicao)}" data-field="competicao" /></td>
+      <td><input type="text" value="${escapeAttr(v.narrador)}" data-field="narrador" /></td>
+      <td><input type="text" value="${escapeAttr(c[0])}" data-field="comentarista_1" /></td>
+      <td><input type="text" value="${escapeAttr(c[1])}" data-field="comentarista_2" /></td>
+      <td><input type="text" value="${escapeAttr(c[2])}" data-field="comentarista_3" /></td>
+      <td><input type="text" value="${escapeAttr(c[3])}" data-field="comentarista_4" /></td>
+      <td><input type="text" value="${escapeAttr(c[4])}" data-field="comentarista_5" /></td>
       <td><button class="save-row">Salvar</button></td>
     `;
 
     tr.querySelector(".save-row").addEventListener("click", async () => {
-      const competicao = tr.querySelector('[data-field="competicao"]').value.trim();
-      const elenco = tr
-        .querySelector('[data-field="elenco"]')
-        .value.split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
+      const field = (name) => tr.querySelector(`[data-field="${name}"]`).value.trim();
+      const competicao = field("competicao");
+      const narrador = field("narrador");
+      const comentaristas = [1, 2, 3, 4, 5].map((n) => field(`comentarista_${n}`)).filter(Boolean);
 
       await fetch("/api/enrich", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_id: v.video_id, competicao: competicao || null, elenco }),
+        body: JSON.stringify({
+          video_id: v.video_id,
+          competicao: competicao || null,
+          narrador: narrador || null,
+          comentaristas,
+        }),
       });
 
-      v.competicao = competicao;
-      v.elenco = elenco;
+      v.competicao = competicao || null;
+      v.narrador = narrador || null;
+      v.comentaristas = comentaristas;
+      v.elenco = [narrador, ...comentaristas].filter(Boolean);
       renderVideosTable();
       renderDashboards();
     });
@@ -349,5 +366,188 @@ function renderEnrichTable() {
     tbody.appendChild(tr);
   }
 }
+
+// ---------- importar CSV de enriquecimento ----------
+
+el("btnImportarCsv").addEventListener("click", async () => {
+  const fileInput = el("csvImportFile");
+  const statusEl = el("csvImportStatus");
+  const file = fileInput.files[0];
+
+  if (!file) {
+    statusEl.textContent = "Selecione um arquivo CSV primeiro.";
+    statusEl.className = "status-msg error";
+    return;
+  }
+
+  statusEl.textContent = "Importando...";
+  statusEl.className = "status-msg";
+
+  try {
+    const text = await file.text();
+    const res = await fetch("/api/enrich/import", {
+      method: "POST",
+      headers: { "Content-Type": "text/csv" },
+      body: text,
+    }).then((r) => r.json());
+
+    if (res.error) throw new Error(res.error);
+
+    let msg = `${res.atualizados} vídeo(s) atualizado(s) a partir do CSV.`;
+    if (res.naoEncontrados?.length) {
+      msg += ` ${res.naoEncontrados.length} video_id(s) não encontrados: ${res.naoEncontrados.slice(0, 10).join(", ")}${res.naoEncontrados.length > 10 ? "..." : ""}`;
+    }
+    statusEl.textContent = msg;
+    statusEl.className = "status-msg success";
+
+    await carregarVideos();
+  } catch (error) {
+    statusEl.textContent = `Erro ao importar: ${error.message}`;
+    statusEl.className = "status-msg error";
+  }
+});
+
+// ---------- performance do elenco ----------
+
+function populateCastFilters() {
+  const membros = new Set();
+  const competicoes = new Set();
+
+  for (const v of videosCache) {
+    for (const nome of v.elenco || []) membros.add(nome);
+    if (v.competicao) competicoes.add(v.competicao);
+  }
+
+  const membroSelect = el("castFiltroMembro");
+  const competicaoSelect = el("castFiltroCompeticao");
+  const prevMembro = membroSelect.value;
+  const prevCompeticao = competicaoSelect.value;
+
+  membroSelect.innerHTML = '<option value="">(nenhum)</option>' +
+    [...membros].sort((a, b) => a.localeCompare(b)).map((m) => `<option value="${escapeAttr(m)}">${m}</option>`).join("");
+  competicaoSelect.innerHTML = '<option value="">Todas</option>' +
+    [...competicoes].sort((a, b) => a.localeCompare(b)).map((c) => `<option value="${escapeAttr(c)}">${c}</option>`).join("");
+
+  if (membros.has(prevMembro)) membroSelect.value = prevMembro;
+  if (competicoes.has(prevCompeticao)) competicaoSelect.value = prevCompeticao;
+}
+
+function castFilteredVideos() {
+  const tipo = el("castFiltroTipo").value;
+  const competicao = el("castFiltroCompeticao").value;
+
+  return videosCache.filter(
+    (v) => (!tipo || v.tipo_conteudo === tipo) && (!competicao || v.competicao === competicao)
+  );
+}
+
+function renderCastRanking(videos) {
+  const porMembro = {};
+
+  for (const v of videos) {
+    for (const nome of v.elenco || []) {
+      if (!porMembro[nome]) porMembro[nome] = { videos: 0, views: 0, comentarios: 0 };
+      porMembro[nome].videos++;
+      porMembro[nome].views += v.views || 0;
+      porMembro[nome].comentarios += v.comentarios || 0;
+    }
+  }
+
+  const linhas = Object.entries(porMembro)
+    .map(([nome, s]) => ({ nome, ...s, media: s.videos ? Math.round(s.views / s.videos) : 0 }))
+    .sort((a, b) => b.views - a.views);
+
+  document.querySelector("#castRankingTable tbody").innerHTML = linhas
+    .map(
+      (l) => `<tr>
+        <td>${l.nome}</td><td>${l.videos}</td>
+        <td>${l.views.toLocaleString("pt-BR")}</td>
+        <td>${l.media.toLocaleString("pt-BR")}</td>
+        <td>${l.comentarios.toLocaleString("pt-BR")}</td>
+      </tr>`
+    )
+    .join("") || `<tr><td colspan="5" class="hint">Sem dados de elenco nesse recorte.</td></tr>`;
+}
+
+function renderCastCombos(videos) {
+  const porCombo = {};
+
+  for (const v of videos) {
+    if (!v.combinacao_elenco) continue;
+    if (!porCombo[v.combinacao_elenco]) porCombo[v.combinacao_elenco] = { videos: 0, views: 0 };
+    porCombo[v.combinacao_elenco].videos++;
+    porCombo[v.combinacao_elenco].views += v.views || 0;
+  }
+
+  const linhas = Object.entries(porCombo)
+    .map(([combo, s]) => ({ combo, ...s, media: s.videos ? Math.round(s.views / s.videos) : 0 }))
+    .sort((a, b) => b.views - a.views);
+
+  document.querySelector("#castComboTable tbody").innerHTML = linhas
+    .map(
+      (l) => `<tr>
+        <td class="wrap">${l.combo}</td><td>${l.videos}</td>
+        <td>${l.views.toLocaleString("pt-BR")}</td>
+        <td>${l.media.toLocaleString("pt-BR")}</td>
+      </tr>`
+    )
+    .join("") || `<tr><td colspan="4" class="hint">Sem combinações de elenco nesse recorte.</td></tr>`;
+}
+
+function renderCastMemberDetail(videos) {
+  const membro = el("castFiltroMembro").value;
+  const container = el("castMemberDetail");
+
+  if (!membro) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const doMembro = videos.filter((v) => (v.elenco || []).includes(membro));
+
+  const porTipo = {};
+  const porCompeticao = {};
+  for (const v of doMembro) {
+    const tipoLabel = CONTENT_TYPE_LABELS[v.tipo_conteudo] || v.tipo_conteudo || "?";
+    porTipo[tipoLabel] = (porTipo[tipoLabel] || 0) + (v.views || 0);
+    if (v.competicao) porCompeticao[v.competicao] = (porCompeticao[v.competicao] || 0) + (v.views || 0);
+  }
+
+  container.innerHTML = `
+    <h5>Detalhe: ${membro} (${doMembro.length} vídeo(s) no recorte atual)</h5>
+    <div class="charts">
+      <div class="chart-card">
+        <h4>Views por tipo de conteúdo</h4>
+        <div class="bar-chart" id="castMemberTipoChart"></div>
+      </div>
+      <div class="chart-card">
+        <h4>Views por competição/programa</h4>
+        <div class="bar-chart" id="castMemberCompeticaoChart"></div>
+      </div>
+    </div>
+  `;
+
+  renderBarChart(el("castMemberTipoChart"), Object.entries(porTipo).map(([label, value]) => ({ label, value })));
+  const comboEntries = Object.entries(porCompeticao).map(([label, value]) => ({ label, value }));
+  el("castMemberCompeticaoChart").innerHTML = comboEntries.length ? "" : `<p class="hint">Sem competição/programa registrado.</p>`;
+  if (comboEntries.length) renderBarChart(el("castMemberCompeticaoChart"), comboEntries);
+}
+
+function renderCastDashboard() {
+  populateCastFilters();
+  const videos = castFilteredVideos();
+  renderCastRanking(videos);
+  renderCastCombos(videos);
+  renderCastMemberDetail(videos);
+}
+
+["castFiltroTipo", "castFiltroCompeticao", "castFiltroMembro"].forEach((id) => {
+  el(id).addEventListener("change", () => {
+    const videos = castFilteredVideos();
+    renderCastRanking(videos);
+    renderCastCombos(videos);
+    renderCastMemberDetail(videos);
+  });
+});
 
 carregarVideos();

@@ -70,7 +70,7 @@
             <thead>
               <tr>
                 <th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
-                <th>Views</th><th>Comentários</th><th>Chat</th><th>Competição</th>
+                <th>Views</th><th>Comentários</th><th>Chat</th><th>Competição/Programa</th>
                 <th>Elenco</th><th>Transcrição</th><th>Link</th>
               </tr>
             </thead>
@@ -96,20 +96,82 @@
             </div>
           </div>
           <div class="chart-card">
-            <h4>Views somadas por competição</h4>
+            <h4>Views somadas por competição/programa</h4>
             <div id="chartCompeticao" class="bar-chart"></div>
           </div>
+        </div>
+
+        <div class="chart-card cast-card">
+          <h4>Performance do elenco</h4>
+          <p class="hint">
+            Veja a performance de cada narrador/comentarista, sozinho ou em combinações,
+            filtrando por tipo de conteúdo e competição/programa.
+          </p>
+
+          <div class="cast-filters">
+            <label>Tipo de conteúdo
+              <select id="castFiltroTipo">
+                <option value="">Todos</option>
+                <option value="live">Live</option>
+                <option value="short">Short</option>
+                <option value="video">Vídeo normal</option>
+              </select>
+            </label>
+            <label>Competição/Programa
+              <select id="castFiltroCompeticao"><option value="">Todas</option></select>
+            </label>
+            <label>Ver detalhe de um membro
+              <select id="castFiltroMembro"><option value="">(nenhum)</option></select>
+            </label>
+          </div>
+
+          <h5>Ranking individual</h5>
+          <div class="table-wrap">
+            <table id="castRankingTable">
+              <thead><tr><th>Membro</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th><th>Comentários (soma)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <h5>Ranking por combinação de elenco</h5>
+          <div class="table-wrap">
+            <table id="castComboTable">
+              <thead><tr><th>Combinação</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+
+          <div id="castMemberDetail"></div>
         </div>
       </section>
 
       <section id="tab-enriquecimento" class="tab-panel">
         <p class="hint">
-          Preencha <strong>competição</strong> e <strong>elenco</strong> de cada vídeo — direto na
-          tabela abaixo (salva por vídeo).
+          Preencha, por vídeo: competição/programa, narrador e até 5 comentaristas.
+          Isso alimenta o dashboard de performance do elenco.
         </p>
+
+        <div class="chart-card">
+          <h4>Importar CSV</h4>
+          <p class="hint">
+            Colunas esperadas: <code>video_id</code>, <code>competicao</code>, <code>narrador</code>,
+            <code>comentarista_1</code> a <code>comentarista_5</code>. Outras colunas são ignoradas.
+          </p>
+          <input id="csvImportFile" type="file" accept=".csv" />
+          <button id="btnImportarCsv" class="primary" style="margin-top:10px;">Importar CSV</button>
+          <div id="csvImportStatus" class="status-msg"></div>
+        </div>
+
+        <h4>Editar manualmente</h4>
         <div class="table-wrap">
           <table id="enrichTable">
-            <thead><tr><th>Título</th><th>Competição</th><th>Elenco (separado por vírgula)</th><th></th></tr></thead>
+            <thead>
+              <tr>
+                <th>Título</th><th>Competição/Programa</th><th>Narrador</th>
+                <th>Comentarista 1</th><th>Comentarista 2</th><th>Comentarista 3</th>
+                <th>Comentarista 4</th><th>Comentarista 5</th><th></th>
+              </tr>
+            </thead>
             <tbody></tbody>
           </table>
         </div>

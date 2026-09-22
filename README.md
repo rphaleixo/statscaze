@@ -18,6 +18,13 @@ Roda inteiramente na Cloudflare: **Worker** (backend em JavaScript) +
   transcritos.
 - **Coleta automática:** um gatilho (cron) roda todo dia e busca os vídeos
   publicados nos últimos 2 dias, sem precisar abrir a página.
+- **Elenco:** cada vídeo tem colunas dedicadas de competição/programa,
+  narrador e até 5 comentaristas (em vez de uma lista livre de "elenco").
+  Isso alimenta o dashboard de performance por membro (sozinho ou em
+  combinação) e por competição/programa, na aba "Dashboards". Essas
+  informações podem ser preenchidas na tabela da aba "Enriquecimento" ou
+  importadas de uma vez via CSV (colunas: `video_id`, `competicao`,
+  `narrador`, `comentarista_1` a `comentarista_5`).
 
 ## Passo a passo para colocar no ar
 

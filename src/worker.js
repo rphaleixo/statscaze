@@ -157,15 +157,14 @@ async function handleExportCsv(url, env) {
   const columns = [
     "video_id", "canal", "tipo_conteudo", "titulo", "data_publicacao",
     "duracao_segundos", "views", "comentarios", "mensagens_chat",
-    "competicao", "elenco", "transcricao_sucesso", "url",
+    "competicao", "narrador",
+    "comentarista_1", "comentarista_2", "comentarista_3", "comentarista_4", "comentarista_5",
+    "transcricao_sucesso", "url",
   ];
 
   const lines = [columns.join(",")];
   for (const video of videos) {
-    const row = columns.map((col) => {
-      const value = col === "elenco" ? (video.elenco || []).join("; ") : video[col];
-      return csvEscape(value);
-    });
+    const row = columns.map((col) => csvEscape(video[col]));
     lines.push(row.join(","));
   }
 
@@ -179,12 +178,85 @@ async function handleExportCsv(url, env) {
 
 async function handleEnrich(request, env) {
   const body = await request.json();
-  const { video_id: videoId, competicao, elenco } = body;
+  const { video_id: videoId, competicao, narrador, comentaristas } = body;
 
   if (!videoId) return json({ error: "video_id é obrigatório." }, 400);
 
-  await updateEnrichment(env.DB, videoId, competicao, elenco);
+  await updateEnrichment(env.DB, videoId, competicao, { narrador, comentaristas });
   return json({ ok: true });
+}
+
+// Importação em lote por CSV. Colunas esperadas: video_id, competicao,
+// narrador, comentarista_1, comentarista_2, comentarista_3, comentarista_4,
+// comentarista_5. Outras colunas são ignoradas. Linhas com video_id
+// desconhecido são reportadas mas não travam o restante da importação.
+function parseCsv(text) {
+  const lines = text.replace(/\r\n/g, "\n").split("\n").filter((l) => l.trim().length);
+  if (!lines.length) return [];
+
+  const parseLine = (line) => {
+    const cells = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+
+      if (inQuotes) {
+        if (char === '"' && line[i + 1] === '"') { current += '"'; i++; }
+        else if (char === '"') inQuotes = false;
+        else current += char;
+      } else if (char === '"') inQuotes = true;
+      else if (char === ",") { cells.push(current); current = ""; }
+      else current += char;
+    }
+    cells.push(current);
+    return cells;
+  };
+
+  const header = parseLine(lines[0]).map((h) => h.trim());
+  return lines.slice(1).map((line) => {
+    const cells = parseLine(line);
+    const row = {};
+    header.forEach((key, i) => { row[key] = (cells[i] || "").trim(); });
+    return row;
+  });
+}
+
+async function handleEnrichImport(request, env) {
+  const csvText = await request.text();
+  const rows = parseCsv(csvText);
+
+  if (!rows.length) return json({ error: "CSV vazio ou ilegível." }, 400);
+  if (!("video_id" in rows[0])) {
+    return json({ error: "O CSV precisa ter uma coluna 'video_id'." }, 400);
+  }
+
+  let atualizados = 0;
+  const naoEncontrados = [];
+
+  for (const row of rows) {
+    const videoId = row.video_id;
+    if (!videoId) continue;
+
+    const exists = await env.DB.prepare("SELECT 1 FROM videos WHERE video_id = ?").bind(videoId).first();
+    if (!exists) {
+      naoEncontrados.push(videoId);
+      continue;
+    }
+
+    const comentaristas = [1, 2, 3, 4, 5]
+      .map((n) => row[`comentarista_${n}`])
+      .filter(Boolean);
+
+    await updateEnrichment(env.DB, videoId, row.competicao || null, {
+      narrador: row.narrador || null,
+      comentaristas,
+    });
+    atualizados++;
+  }
+
+  return json({ atualizados, naoEncontrados });
 }
 
 async function autoCollect(env, days = 2) {
@@ -260,6 +332,9 @@ export default {
       }
       if (url.pathname === "/api/enrich" && request.method === "POST") {
         return await handleEnrich(request, env);
+      }
+      if (url.pathname === "/api/enrich/import" && request.method === "POST") {
+        return await handleEnrichImport(request, env);
       }
     } catch (error) {
       return json({ error: String(error?.message || error) }, 500);
