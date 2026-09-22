@@ -100,6 +100,26 @@ button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
+.subtabs { margin-top: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+.subtab-btn {
+  width: auto;
+  background: none;
+  color: var(--text-muted);
+  border-radius: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+}
+.subtab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
+.subtab-panel { display: none; }
+.subtab-panel.active { display: block; }
+
+.dash-filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 12px; }
+.dash-filters-grid label { font-size: 13px; margin-bottom: 0; }
+.dash-filters-grid select[multiple] { width: 100%; min-height: 90px; }
+.dash-range { display: flex; gap: 6px; }
+.dash-range input { width: auto; flex: 1; min-width: 0; }
+
 .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .panel-header .actions .button { width: auto; padding: 8px 16px; }
 
@@ -131,6 +151,9 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .bar-row { display: grid; grid-template-columns: 110px 1fr 60px; align-items: center; gap: 8px; font-size: 12px; }
 .bar-track { background: var(--bg); border-radius: 4px; overflow: hidden; height: 16px; }
 .bar-fill { height: 100%; background: var(--accent); }
+
+.modo-teste-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.modo-teste-bar .status-msg { padding: 0; font-weight: 600; }
 
 .status-msg { font-size: 13px; padding: 8px 0; }
 .status-msg.error { color: var(--danger); }

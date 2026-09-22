@@ -30,6 +30,7 @@
         <button class="tab-btn" data-tab="elenco">Elenco</button>
         <button class="tab-btn" data-tab="competicoes">Competições</button>
         <button class="tab-btn" data-tab="tipos-conteudo">Tipo de Conteúdo</button>
+        <button class="tab-btn" data-tab="papeis">Papéis</button>
         <button class="tab-btn" data-tab="dashboards">Dashboards</button>
       </nav>
 
@@ -92,6 +93,18 @@
           </div>
         </div>
 
+        <div class="modo-teste-bar">
+          <span id="modoDadosBadge" class="status-msg">Modo: dados reais</span>
+          <button id="btnUsarDadosTeste" type="button" class="save-row">Usar dados de teste (mocados)</button>
+          <button id="btnVoltarDadosReais" type="button" class="save-row" style="display:none;">Voltar aos dados reais</button>
+        </div>
+        <p class="hint">
+          Os dados de teste são gerados no navegador a partir do elenco, papéis, competições e
+          tipos de conteúdo já cadastrados — servem só para explorar a tela e o dashboard, nunca
+          são salvos no banco. Enquanto o modo teste estiver ativo, os botões de Transcrição,
+          Sugerir elenco (IA) e Salvar de cada linha ficam desativados.
+        </p>
+
         <p class="hint">
           Clique nos campos de cada linha para classificar o vídeo (tipo de conteúdo, competição
           ou programa) e marcar quem participou (com o papel específico naquele vídeo — a mesma
@@ -104,9 +117,8 @@
             <p class="hint">
               Formato: uma linha por pessoa. Colunas: <code>video_id</code>, <code>tipo_conteudo</code>
               (nome cadastrado na aba "Tipo de Conteúdo", opcional), <code>competicao</code> (opcional),
-              <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (narrador,
-              comentarista, reporter ou apresentador). Repita o <code>video_id</code> em uma linha
-              para cada pessoa do vídeo.
+              <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (nome cadastrado
+              na aba "Papéis"). Repita o <code>video_id</code> em uma linha para cada pessoa do vídeo.
             </p>
             <input id="csvImportFile" type="file" accept=".csv" />
             <button id="btnImportarCsv" style="margin-top:10px;">Importar CSV</button>
@@ -119,7 +131,7 @@
             <thead>
               <tr>
                 <th>Thumb</th><th>ID (YouTube)</th><th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
-                <th>Views</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
+                <th>Views</th><th>Curtidas</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
                 <th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
                 <th>Elenco do vídeo</th><th>Avaliação IA</th><th>Ações</th>
               </tr>
@@ -234,54 +246,137 @@
         </div>
       </section>
 
-      <section id="tab-dashboards" class="tab-panel">
-        <div class="metrics" id="metrics"></div>
-        <div class="charts">
-          <div class="chart-card">
-            <h4>Vídeos por tipo de conteúdo</h4>
-            <div id="chartTipos" class="bar-chart"></div>
-          </div>
-          <div class="chart-card">
-            <h4>Top 10 vídeos por views</h4>
-            <div class="table-wrap">
-              <table id="top10Table">
-                <thead><tr><th>Título</th><th>Tipo</th><th>Duração</th><th>Views</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-          <div class="chart-card">
-            <h4>Views somadas por competição</h4>
-            <div id="chartCompeticao" class="bar-chart"></div>
-          </div>
-          <div class="chart-card">
-            <h4>Views somadas por programa</h4>
-            <div id="chartPrograma" class="bar-chart"></div>
-          </div>
+      <section id="tab-papeis" class="tab-panel">
+        <p class="hint">
+          Lista de papéis usada na aba "Vídeos" para marcar quem participou de cada vídeo (e nas
+          sugestões da IA). Um papel arquivado some da lista de novas participações, mas continua
+          valendo para as participações que já foram gravadas com ele.
+        </p>
+
+        <div class="pessoa-form">
+          <input id="novoPapelNome" type="text" placeholder="Nome do papel" />
+          <button id="btnAdicionarPapel" class="primary">Adicionar</button>
         </div>
 
-        <div class="chart-card cast-card">
-          <h4>Performance do elenco</h4>
-          <p class="hint">
-            Veja a performance de cada narrador/comentarista, sozinho ou em combinações,
-            filtrando por tipo de conteúdo e competição/programa.
-          </p>
+        <div class="table-wrap">
+          <table id="papeisTable">
+            <thead><tr><th>Nome</th><th>Status</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-          <div class="cast-filters">
-            <label>Tipo de conteúdo
-              <select id="castFiltroTipo">
-                <option value="">Todos</option>
+      <section id="tab-dashboards" class="tab-panel">
+        <div class="chart-card">
+          <h4>Filtros</h4>
+          <p class="hint">Filtram todas as sub-abas de Dashboards ao mesmo tempo. Deixe em branco para não filtrar.</p>
+          <div class="dash-filters-grid">
+            <label>Competição
+              <select id="dashFiltroCompeticao" multiple size="5"></select>
+            </label>
+            <label>Programa
+              <select id="dashFiltroPrograma" multiple size="5"></select>
+            </label>
+            <label>Tipo de vídeo
+              <select id="dashFiltroTipoVideo" multiple size="3">
                 <option value="live">Live</option>
                 <option value="short">Short</option>
                 <option value="video">Vídeo normal</option>
               </select>
             </label>
-            <label>Competição ou programa
-              <select id="castFiltroCompeticao"><option value="">Todas</option></select>
+            <label>Elenco / membro
+              <select id="dashFiltroElenco" multiple size="5"></select>
             </label>
             <label>Papel
-              <select id="castFiltroPapel"><option value="">Todos</option></select>
+              <select id="dashFiltroPapel" multiple size="5"></select>
             </label>
+            <label>Duração (minutos)
+              <div class="dash-range">
+                <input id="dashFiltroDuracaoMin" type="number" min="0" placeholder="Mín." />
+                <input id="dashFiltroDuracaoMax" type="number" min="0" placeholder="Máx." />
+              </div>
+            </label>
+            <label>Data de publicação
+              <div class="dash-range">
+                <input id="dashFiltroDataDe" type="date" />
+                <input id="dashFiltroDataAte" type="date" />
+              </div>
+            </label>
+          </div>
+          <button id="btnLimparFiltrosDash" type="button" class="save-row">Limpar filtros</button>
+        </div>
+
+        <nav class="tabs subtabs">
+          <button class="subtab-btn active" data-subtab="gerais">Dados gerais</button>
+          <button class="subtab-btn" data-subtab="tipo-video">Por tipo de vídeo</button>
+          <button class="subtab-btn" data-subtab="competicao">Por competição</button>
+          <button class="subtab-btn" data-subtab="programa">Por programa</button>
+          <button class="subtab-btn" data-subtab="elenco">Por elenco</button>
+          <button class="subtab-btn" data-subtab="duracao">Por duração</button>
+          <button class="subtab-btn" data-subtab="data">Por data</button>
+        </nav>
+
+        <section id="subtab-gerais" class="subtab-panel active">
+          <div class="metrics" id="metrics"></div>
+          <div class="charts">
+            <div class="chart-card">
+              <h4>Vídeos por tipo de conteúdo</h4>
+              <div id="chartTipos" class="bar-chart"></div>
+            </div>
+            <div class="chart-card">
+              <h4>Top 10 vídeos por views</h4>
+              <div class="table-wrap">
+                <table id="top10Table">
+                  <thead><tr><th>Título</th><th>Tipo</th><th>Duração</th><th>Views</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="subtab-tipo-video" class="subtab-panel">
+          <div class="table-wrap">
+            <table id="statsTipoVideoTable">
+              <thead><tr><th>Tipo de vídeo</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th><th>Curtidas (soma)</th><th>Comentários (soma)</th><th>Engajamento</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="subtab-competicao" class="subtab-panel">
+          <div class="chart-card">
+            <h4>Views somadas por competição</h4>
+            <div id="chartCompeticao" class="bar-chart"></div>
+          </div>
+          <div class="table-wrap">
+            <table id="statsCompeticaoTable">
+              <thead><tr><th>Competição</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th><th>Curtidas (soma)</th><th>Comentários (soma)</th><th>Engajamento</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="subtab-programa" class="subtab-panel">
+          <div class="chart-card">
+            <h4>Views somadas por programa</h4>
+            <div id="chartPrograma" class="bar-chart"></div>
+          </div>
+          <div class="table-wrap">
+            <table id="statsProgramaTable">
+              <thead><tr><th>Programa</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th><th>Curtidas (soma)</th><th>Comentários (soma)</th><th>Engajamento</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="subtab-elenco" class="subtab-panel">
+          <p class="hint">
+            Quantidade de escalações e engajamento de cada membro, sozinho ou em combinações. Use
+            os filtros acima (elenco/papel/competição/etc.) para refinar.
+          </p>
+
+          <div class="cast-filters">
             <label>Ver detalhe de um membro
               <select id="castFiltroMembro"><option value="">(nenhum)</option></select>
             </label>
@@ -290,7 +385,12 @@
           <h5>Ranking individual</h5>
           <div class="table-wrap">
             <table id="castRankingTable">
-              <thead><tr><th>Membro</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th><th>Comentários (soma)</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Membro</th><th>Escalações</th><th>Views (soma)</th><th>Views (média)</th>
+                  <th>Curtidas (soma)</th><th>Comentários (soma)</th><th>Chat (soma)</th><th>Engajamento</th>
+                </tr>
+              </thead>
               <tbody></tbody>
             </table>
           </div>
@@ -304,7 +404,29 @@
           </div>
 
           <div id="castMemberDetail"></div>
-        </div>
+        </section>
+
+        <section id="subtab-duracao" class="subtab-panel">
+          <div class="table-wrap">
+            <table id="statsDuracaoTable">
+              <thead><tr><th>Faixa de duração</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th><th>Curtidas (soma)</th><th>Comentários (soma)</th><th>Engajamento</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="subtab-data" class="subtab-panel">
+          <div class="chart-card">
+            <h4>Views somadas por mês</h4>
+            <div id="chartData" class="bar-chart"></div>
+          </div>
+          <div class="table-wrap">
+            <table id="statsDataTable">
+              <thead><tr><th>Mês</th><th>Vídeos</th><th>Views (soma)</th><th>Views (média)</th><th>Curtidas (soma)</th><th>Comentários (soma)</th><th>Engajamento</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </main>
   </div>

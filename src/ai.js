@@ -40,7 +40,7 @@ function extrairJson(valor) {
 // pessoas já cadastradas (evita a IA inventar gente que não existe no elenco).
 export async function sugerirClassificacao(
   ai,
-  { titulo, descricao, transcricao, competicoesConhecidas, programasConhecidas, pessoasConhecidas, tiposConteudoConhecidos }
+  { titulo, descricao, transcricao, competicoesConhecidas, programasConhecidas, pessoasConhecidas, tiposConteudoConhecidos, papeisConhecidos }
 ) {
   // Cada pessoa pode ter vários apelidos/grafias — todos contam como
   // "nomes conhecidos" para a IA reconhecer, mas sempre voltam ao nome
@@ -59,6 +59,9 @@ export async function sugerirClassificacao(
   const tiposConteudoLower = new Map((tiposConteudoConhecidos || []).map((nome) => [nome.toLowerCase(), nome]));
   const listaTiposConteudo = (tiposConteudoConhecidos || []).join(", ");
 
+  const papeisLower = new Map((papeisConhecidos || []).map((nome) => [nome.toLowerCase(), nome]));
+  const listaPapeis = (papeisConhecidos || []).join(", ");
+
   const prompt = `Você analisa um vídeo de um canal de TV/YouTube esportivo a partir do título, descrição e um trecho da transcrição, e devolve uma classificação em JSON.
 
 Primeiro decida o TIPO DE CONTEÚDO do vídeo, escolhendo EXATAMENTE um destes nomes cadastrados (ou nenhum, se não tiver certeza): ${listaTiposConteudo || "nenhum tipo cadastrado ainda"}.
@@ -67,10 +70,10 @@ Se o tipo escolhido tiver a ver com transmissão de uma competição/jogo/evento
 
 Se o tipo escolhido tiver a ver com um programa de estúdio, identifique o nome do PROGRAMA. Programas já usados neste canal: ${programasConhecidas?.length ? programasConhecidas.join(", ") : "nenhum cadastrado ainda"}.
 
-Depois, veja se alguma destas pessoas já cadastradas no elenco do canal é claramente mencionada no título, descrição ou transcrição, e qual papel ela teve NESTE vídeo (narrador, comentarista, reporter ou apresentador — use "reporter" sem acento). A lista abaixo mostra "apelido (= nome oficial)" quando a pessoa tem apelido — se reconhecer o apelido no texto, responda com o NOME OFICIAL, não o apelido. Só inclua pessoas desta lista, nunca invente nomes novos: ${variantesParaExibir.length ? variantesParaExibir.join(", ") : "nenhuma pessoa cadastrada ainda"}.
+Depois, veja se alguma destas pessoas já cadastradas no elenco do canal é claramente mencionada no título, descrição ou transcrição, e qual papel ela teve NESTE vídeo, escolhendo EXATAMENTE um destes papéis cadastrados: ${listaPapeis || "nenhum papel cadastrado ainda"}. A lista abaixo mostra "apelido (= nome oficial)" quando a pessoa tem apelido — se reconhecer o apelido no texto, responda com o NOME OFICIAL, não o apelido. Só inclua pessoas desta lista, nunca invente nomes novos: ${variantesParaExibir.length ? variantesParaExibir.join(", ") : "nenhuma pessoa cadastrada ainda"}.
 
 Responda SOMENTE com um objeto JSON, sem nenhum texto antes ou depois, no formato:
-{"tipo_conteudo": "um dos nomes cadastrados, exatamente como escrito, ou null", "competicao": "nome ou null", "programa": "nome ou null", "confianca": 0.0 a 1.0, "participantes": [{"nome": "...(nome oficial)", "papel": "narrador|comentarista|reporter|apresentador"}]}
+{"tipo_conteudo": "um dos nomes cadastrados, exatamente como escrito, ou null", "competicao": "nome ou null", "programa": "nome ou null", "confianca": 0.0 a 1.0, "participantes": [{"nome": "...(nome oficial)", "papel": "um dos papéis cadastrados, exatamente como escrito"}]}
 
 Título: ${titulo || ""}
 Descrição: ${truncar(descricao, 800)}
@@ -89,11 +92,12 @@ Trecho da transcrição: ${truncar(transcricao, MAX_TRANSCRICAO_CHARS)}`;
     return { erro: "A IA não devolveu uma resposta interpretável." };
   }
 
-  const papeisValidos = new Set(["narrador", "comentarista", "reporter", "apresentador"]);
-
   const participantes = (Array.isArray(parsed.participantes) ? parsed.participantes : [])
-    .filter((p) => p?.nome && nomeCanonicoPorVariante.has(String(p.nome).toLowerCase()) && papeisValidos.has(p.papel))
-    .map((p) => ({ nome: nomeCanonicoPorVariante.get(p.nome.toLowerCase()), papel: p.papel }));
+    .map((p) => ({
+      nome: p?.nome ? nomeCanonicoPorVariante.get(String(p.nome).toLowerCase()) : null,
+      papel: p?.papel ? papeisLower.get(String(p.papel).toLowerCase()) : null,
+    }))
+    .filter((p) => p.nome && p.papel);
 
   const tipoConteudo = parsed.tipo_conteudo ? tiposConteudoLower.get(String(parsed.tipo_conteudo).toLowerCase()) || null : null;
 

@@ -31,6 +31,9 @@ import {
   listTiposConteudo,
   createTipoConteudo,
   arquivarTipoConteudo,
+  listPapeis,
+  createPapel,
+  arquivarPapel,
 } from "./db.js";
 import { sugerirClassificacao } from "./ai.js";
 
@@ -109,6 +112,7 @@ async function handleDetails(request, env) {
       duracao_segundos: video.duracao_segundos,
       views: video.views,
       comentarios: video.comentarios,
+      likes: video.likes,
       mensagens_chat: mensagensChat,
       url: video.url,
       thumbnail_url: video.thumbnail_url,
@@ -176,7 +180,7 @@ async function handleExportCsv(url, env) {
 
   const columns = [
     "video_id", "canal", "tipo_video", "tipo_conteudo", "titulo", "data_publicacao",
-    "duracao_segundos", "views", "comentarios", "mensagens_chat",
+    "duracao_segundos", "views", "comentarios", "likes", "mensagens_chat",
     "competicao", "programa", "elenco", "transcricao_sucesso", "url", "thumbnail_url",
   ];
 
@@ -264,7 +268,8 @@ async function handleEnrichImport(request, env) {
     return json({ error: "O CSV precisa ter uma coluna 'video_id'." }, 400);
   }
 
-  const papeisValidos = new Set(Object.keys(PAPEIS));
+  const papeisCadastrados = await listPapeis(env.DB, { incluirArquivados: true });
+  const nomePorPapelLower = new Map(papeisCadastrados.map((p) => [p.nome.toLowerCase(), p.nome]));
   const tiposConteudo = await listTiposConteudo(env.DB, { incluirArquivados: true });
   const nomePorTipoConteudoLower = new Map(tiposConteudo.map((t) => [t.nome.toLowerCase(), t.nome]));
 
@@ -284,8 +289,8 @@ async function handleEnrichImport(request, env) {
     if (tipoConteudoNome) entry.tipoConteudo = tipoConteudoNome;
 
     if (row.nome?.trim()) {
-      const papel = (row.papel || "comentarista").trim().toLowerCase();
-      if (papeisValidos.has(papel)) entry.participacoes.push({ nome: row.nome.trim(), papel });
+      const papelNome = nomePorPapelLower.get((row.papel || "comentarista").trim().toLowerCase());
+      if (papelNome) entry.participacoes.push({ nome: row.nome.trim(), papel: papelNome });
     }
   }
 
@@ -403,6 +408,31 @@ async function handleArquivarTipoConteudo(request, env) {
   return json({ ok: true });
 }
 
+// ---------- papéis (lista editável, com arquivamento) ----------
+
+async function handleListPapeis(env) {
+  const papeis = await listPapeis(env.DB, { incluirArquivados: true });
+  return json({ papeis, papeisLabel: PAPEIS });
+}
+
+// body: { nome }
+async function handleCreatePapel(request, env) {
+  const body = await request.json();
+  if (!body.nome?.trim()) return json({ error: "nome é obrigatório." }, 400);
+
+  const id = await createPapel(env.DB, body.nome);
+  return json({ id });
+}
+
+// body: { id, arquivado: true|false }
+async function handleArquivarPapel(request, env) {
+  const body = await request.json();
+  if (!body.id) return json({ error: "id é obrigatório." }, 400);
+
+  await arquivarPapel(env.DB, body.id, body.arquivado);
+  return json({ ok: true });
+}
+
 // ---------- sugestão de classificação (tipo de conteúdo/competição/programa/elenco) via IA ----------
 
 async function handleAiSugerir(request, env) {
@@ -417,6 +447,7 @@ async function handleAiSugerir(request, env) {
   const pessoasConhecidas = await listPessoas(env.DB);
   const tiposConteudoConhecidos = (await listTiposConteudo(env.DB, { incluirArquivados: false }))
     .map((t) => t.nome);
+  const papeisConhecidos = (await listPapeis(env.DB, { incluirArquivados: false })).map((p) => p.nome);
   const titles = await getVideoTitlesUrls(env.DB, videoIds);
   const rows = await env.DB
     .prepare(`SELECT video_id, titulo, descricao, transcricao_completa FROM videos WHERE video_id IN (${videoIds.map(() => "?").join(",")})`)
@@ -434,6 +465,7 @@ async function handleAiSugerir(request, env) {
       programasConhecidas,
       pessoasConhecidas,
       tiposConteudoConhecidos,
+      papeisConhecidos,
     });
 
     if (tipoConteudo || competicao || programa) {
@@ -508,6 +540,7 @@ async function autoCollect(env, days = 2) {
         duracao_segundos: video.duracao_segundos,
         views: video.views,
         comentarios: video.comentarios,
+        likes: video.likes,
         mensagens_chat: mensagensChat,
         url: video.url,
         thumbnail_url: video.thumbnail_url,
@@ -581,6 +614,15 @@ export default {
       }
       if (url.pathname === "/api/tipos-conteudo/arquivar" && request.method === "POST") {
         return await handleArquivarTipoConteudo(request, env);
+      }
+      if (url.pathname === "/api/papeis" && request.method === "GET") {
+        return await handleListPapeis(env);
+      }
+      if (url.pathname === "/api/papeis" && request.method === "POST") {
+        return await handleCreatePapel(request, env);
+      }
+      if (url.pathname === "/api/papeis/arquivar" && request.method === "POST") {
+        return await handleArquivarPapel(request, env);
       }
       if (url.pathname === "/api/ai/sugerir" && request.method === "POST") {
         return await handleAiSugerir(request, env);

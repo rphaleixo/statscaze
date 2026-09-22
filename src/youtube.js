@@ -116,6 +116,7 @@ export async function getVideoDetails(videoIds, channelHandle, apiKey) {
       duracao_segundos: parseIso8601Duration(contentDetails.duration),
       views: parseInt(statistics.viewCount || "0", 10),
       comentarios: statistics.commentCount != null ? parseInt(statistics.commentCount, 10) : null,
+      likes: statistics.likeCount != null ? parseInt(statistics.likeCount, 10) : null,
       url: `https://www.youtube.com/watch?v=${item.id}`,
       thumbnail_url: thumbnailUrl,
       _live_chat_id: liveDetails.activeLiveChatId || null,

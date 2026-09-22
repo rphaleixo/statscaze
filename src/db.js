@@ -10,12 +10,13 @@ export async function upsertVideoMetadata(db, row) {
     .prepare(
       `INSERT INTO videos (
         video_id, canal, tipo_video, titulo, descricao,
-        data_publicacao, duracao_segundos, views, comentarios,
+        data_publicacao, duracao_segundos, views, comentarios, likes,
         mensagens_chat, url, thumbnail_url, coletado_em
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(video_id) DO UPDATE SET
         views=excluded.views,
         comentarios=excluded.comentarios,
+        likes=excluded.likes,
         mensagens_chat=excluded.mensagens_chat,
         coletado_em=excluded.coletado_em`
     )
@@ -29,6 +30,7 @@ export async function upsertVideoMetadata(db, row) {
       row.duracao_segundos,
       row.views,
       row.comentarios,
+      row.likes ?? null,
       row.mensagens_chat,
       row.url,
       row.thumbnail_url || null,
@@ -208,6 +210,29 @@ export async function createTipoConteudo(db, nome) {
 
 export async function arquivarTipoConteudo(db, id, arquivado) {
   await db.prepare(`UPDATE tipos_conteudo SET arquivado = ? WHERE id = ?`).bind(arquivado ? 1 : 0, id).run();
+}
+
+// ---------- papéis (lista editável, com arquivamento) ----------
+
+// incluirArquivados=false (padrão) é o que deve alimentar o menu de papel
+// na aba Vídeos — um papel arquivado nunca aparece lá, mas continua
+// existindo para as participações que já foram gravadas com ele.
+export async function listPapeis(db, { incluirArquivados = true } = {}) {
+  const where = incluirArquivados ? "" : "WHERE arquivado = 0";
+  const result = await db.prepare(`SELECT * FROM papeis ${where} ORDER BY nome`).all();
+  return result.results;
+}
+
+export async function createPapel(db, nome) {
+  const result = await db
+    .prepare(`INSERT INTO papeis (nome, arquivado, criado_em) VALUES (?, 0, ?) ON CONFLICT(nome) DO NOTHING`)
+    .bind(nome.trim(), new Date().toISOString())
+    .run();
+  return result.meta.last_row_id;
+}
+
+export async function arquivarPapel(db, id, arquivado) {
+  await db.prepare(`UPDATE papeis SET arquivado = ? WHERE id = ?`).bind(arquivado ? 1 : 0, id).run();
 }
 
 // ---------- participações (elenco por vídeo) ----------
