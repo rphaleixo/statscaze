@@ -26,7 +26,7 @@
       </section>
 
       <section>
-        <h2>Tipo de conteúdo</h2>
+        <h2>Tipo de vídeo</h2>
         <label class="checkbox"><input type="checkbox" value="live" checked /> Live</label>
         <label class="checkbox"><input type="checkbox" value="short" checked /> Short</label>
         <label class="checkbox"><input type="checkbox" value="video" checked /> Vídeo normal</label>
@@ -69,7 +69,7 @@
           <table id="videosTable">
             <thead>
               <tr>
-                <th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
+                <th>Tipo</th><th>Conteúdo</th><th>Título</th><th>Publicação</th><th>Duração</th>
                 <th>Views</th><th>Comentários</th><th>Chat</th><th>Competição/Programa</th>
                 <th>Elenco</th><th>Transcrição</th><th>Link</th>
               </tr>
@@ -96,8 +96,12 @@
             </div>
           </div>
           <div class="chart-card">
-            <h4>Views somadas por competição/programa</h4>
+            <h4>Views somadas por competição</h4>
             <div id="chartCompeticao" class="bar-chart"></div>
+          </div>
+          <div class="chart-card">
+            <h4>Views somadas por programa</h4>
+            <div id="chartPrograma" class="bar-chart"></div>
           </div>
         </div>
 
@@ -117,8 +121,11 @@
                 <option value="video">Vídeo normal</option>
               </select>
             </label>
-            <label>Competição/Programa
+            <label>Competição ou programa
               <select id="castFiltroCompeticao"><option value="">Todas</option></select>
+            </label>
+            <label>Papel
+              <select id="castFiltroPapel"><option value="">Todos</option></select>
             </label>
             <label>Ver detalhe de um membro
               <select id="castFiltroMembro"><option value="">(nenhum)</option></select>
@@ -147,15 +154,45 @@
 
       <section id="tab-enriquecimento" class="tab-panel">
         <p class="hint">
-          Preencha, por vídeo: competição/programa, narrador e até 5 comentaristas.
-          Isso alimenta o dashboard de performance do elenco.
+          Preencha, por vídeo: tipo de conteúdo (transmissão, programa ou especial), competição
+          ou programa, e quem participou (com o papel de cada um nesse vídeo específico — a
+          mesma pessoa pode ter papéis diferentes em vídeos diferentes).
         </p>
+
+        <div class="chart-card">
+          <h4>Elenco cadastrado</h4>
+          <p class="hint">Cadastre aqui as pessoas que podem aparecer nos vídeos, com o papel mais comum de cada uma.</p>
+          <div class="pessoa-form">
+            <input id="novaPessoaNome" type="text" placeholder="Nome" />
+            <select id="novaPessoaPapel"></select>
+            <button id="btnAdicionarPessoa" class="primary">Adicionar</button>
+          </div>
+          <div class="table-wrap">
+            <table id="pessoasTable">
+              <thead><tr><th>Nome</th><th>Papel padrão</th><th></th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <h4>Sugerir classificação via IA</h4>
+          <p class="hint">
+            Usa a IA da própria Cloudflare (Workers AI) para ler título, descrição e transcrição de
+            cada vídeo e sugerir o tipo de conteúdo, a competição/programa, e comparar com a lista de
+            elenco para sugerir quem participou. Tudo fica pendente até você aprovar, na tabela abaixo.
+          </p>
+          <button id="btnSugerirIA" class="primary">Sugerir para vídeos sem classificação</button>
+        </div>
 
         <div class="chart-card">
           <h4>Importar CSV</h4>
           <p class="hint">
-            Colunas esperadas: <code>video_id</code>, <code>competicao</code>, <code>narrador</code>,
-            <code>comentarista_1</code> a <code>comentarista_5</code>. Outras colunas são ignoradas.
+            Formato: uma linha por pessoa. Colunas: <code>video_id</code>, <code>tipo_conteudo</code>
+            (transmissao/programa/especial, opcional), <code>competicao</code> (opcional),
+            <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (narrador,
+            comentarista, reporter ou apresentador). Repita o <code>video_id</code> em uma linha
+            para cada pessoa do vídeo.
           </p>
           <input id="csvImportFile" type="file" accept=".csv" />
           <button id="btnImportarCsv" class="primary" style="margin-top:10px;">Importar CSV</button>
@@ -167,9 +204,8 @@
           <table id="enrichTable">
             <thead>
               <tr>
-                <th>Título</th><th>Competição/Programa</th><th>Narrador</th>
-                <th>Comentarista 1</th><th>Comentarista 2</th><th>Comentarista 3</th>
-                <th>Comentarista 4</th><th>Comentarista 5</th><th></th>
+                <th>Título</th><th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
+                <th>Elenco do vídeo</th><th></th>
               </tr>
             </thead>
             <tbody></tbody>

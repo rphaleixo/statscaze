@@ -18,6 +18,11 @@ database_id = "78573859-f9ef-4917-8361-05f5d77bc2e5"
 [triggers]
 crons = ["0 6 * * *"]
 
+# IA da própria Cloudflare (Workers AI), usada para sugerir a
+# competição/programa de cada vídeo. Sem chave extra, sem custo por fora.
+[ai]
+binding = "AI"
+
 [vars]
 CHANNEL_HANDLE = "CazeTV"
 

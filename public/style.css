@@ -138,6 +138,32 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .chart-card h5 { font-size: 13px; color: var(--text-muted); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .03em; }
 code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
+.pessoa-form { display: grid; grid-template-columns: 1fr 160px auto; gap: 8px; margin-bottom: 14px; align-items: end; }
+.pessoa-form input, .pessoa-form select, .pessoa-form button { margin-top: 0; width: auto; }
+.pessoa-form button { padding: 8px 14px; }
+
+.elenco-video-cell { min-width: 280px; }
+.elenco-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.elenco-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 999px;
+  padding: 3px 6px 3px 10px; font-size: 12px; white-space: nowrap;
+}
+.elenco-pill button {
+  width: auto; padding: 0 4px; background: none; color: var(--text-muted);
+  font-size: 14px; line-height: 1;
+}
+.elenco-add-form { display: flex; gap: 6px; }
+.elenco-add-form input[list] { flex: 1; margin-top: 0; }
+.elenco-add-form select { width: auto; margin-top: 0; }
+.elenco-add-form button { width: auto; padding: 4px 10px; font-size: 12px; }
+
+.sugestao-ia {
+  font-size: 12px; color: var(--accent); margin-top: 6px;
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.sugestao-ia button { width: auto; padding: 2px 8px; font-size: 11px; }
+
 td input[type="text"] {
   width: 100%;
   padding: 4px 6px;

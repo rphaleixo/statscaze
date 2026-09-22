@@ -2,7 +2,10 @@
 
 const API_BASE = "https://www.googleapis.com/youtube/v3";
 
-export const CONTENT_TYPES = {
+// Formato técnico do vídeo (vindo da própria API do YouTube) — não confundir
+// com a classificação editorial (transmissão/programa/especial), que é
+// escolhida manualmente ou sugerida pela IA.
+export const TIPOS_VIDEO = {
   live: "Live",
   short: "Short",
   video: "Vídeo normal",
@@ -98,12 +101,12 @@ export async function getVideoDetails(videoIds, channelHandle, apiKey) {
     const liveDetails = item.liveStreamingDetails || {};
 
     const publishedAt = liveDetails.actualStartTime || snippet.publishedAt;
-    const tipoConteudo = classifyContentType(snippet, contentDetails, liveDetails);
+    const tipoVideo = classifyContentType(snippet, contentDetails, liveDetails);
 
     return {
       video_id: item.id,
       canal: channelHandle,
-      tipo_conteudo: tipoConteudo,
+      tipo_video: tipoVideo,
       titulo: snippet.title || "",
       descricao: snippet.description || "",
       data_publicacao: publishedAt,

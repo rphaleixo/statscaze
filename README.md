@@ -18,13 +18,27 @@ Roda inteiramente na Cloudflare: **Worker** (backend em JavaScript) +
   transcritos.
 - **Coleta automática:** um gatilho (cron) roda todo dia e busca os vídeos
   publicados nos últimos 2 dias, sem precisar abrir a página.
-- **Elenco:** cada vídeo tem colunas dedicadas de competição/programa,
-  narrador e até 5 comentaristas (em vez de uma lista livre de "elenco").
-  Isso alimenta o dashboard de performance por membro (sozinho ou em
-  combinação) e por competição/programa, na aba "Dashboards". Essas
-  informações podem ser preenchidas na tabela da aba "Enriquecimento" ou
-  importadas de uma vez via CSV (colunas: `video_id`, `competicao`,
-  `narrador`, `comentarista_1` a `comentarista_5`).
+- **Classificação editorial:** além do tipo técnico do vídeo (live/short/vídeo
+  normal, que vem direto da API do YouTube), cada vídeo tem um "tipo de
+  conteúdo" próprio — transmissão, programa ou especial — e, dependendo
+  disso, uma competição (transmissão) ou um programa (programa), como campos
+  separados.
+- **Elenco:** existe uma lista de pessoas cadastradas (aba "Enriquecimento"),
+  e cada vídeo tem suas próprias participações — quem apareceu e em qual
+  papel (narrador, comentarista, repórter ou apresentador). A mesma pessoa
+  pode ter papéis diferentes em vídeos diferentes. Transmissão libera
+  narrador/comentarista/repórter; programa libera apresentador; especial não
+  tem restrição. Isso alimenta o dashboard de performance por membro
+  (sozinho ou em combinação), na aba "Dashboards". Pode ser preenchido na
+  tabela da aba "Enriquecimento", importado em lote via CSV, ou sugerido
+  automaticamente pela IA (próximo item).
+- **IA para classificar vídeos (Workers AI):** um botão na aba
+  "Enriquecimento" usa a IA da própria Cloudflare (sem chave extra, sem
+  custo por fora) para ler título, descrição e transcrição de cada vídeo e
+  sugerir o tipo de conteúdo, a competição/programa, e comparar com a lista
+  de elenco para sugerir quem participou. Nada é gravado como dado oficial
+  sozinho — a sugestão fica pendente até você clicar em "Usar" ou adicionar
+  manualmente o elenco sugerido.
 
 ## Passo a passo para colocar no ar
 
@@ -58,7 +72,8 @@ Esse comando imprime um `database_id`. Copie esse valor e cole no arquivo
 database_id = "COLOQUE_AQUI_O_ID_DO_BANCO"
 ```
 
-Depois, crie as tabelas no banco:
+Depois, aplique as migrações (criam/atualizam as tabelas — o Wrangler
+lembra sozinho quais já rodaram, então rodar de novo no futuro é seguro):
 
 ```bash
 npm run db:migrate:remote
@@ -141,7 +156,8 @@ src/worker.js       → rotas da API e a coleta automática (cron)
 src/youtube.js       → chamadas à API do YouTube
 src/transcript.js     → extração de transcrição via legendas públicas
 src/db.js            → leitura/escrita no banco D1
-migrations/          → schema do banco
+src/ai.js             → sugestões via Workers AI (classificação + elenco)
+migrations/          → schema do banco, em ordem (0001, 0002, 0003...)
 public/               → página (HTML/CSS/JS) servida pelo Worker
 python-legacy/         → versão original em Python/Streamlit (referência)
 ```

@@ -3,17 +3,30 @@ import {
   searchVideoIdsPage,
   getVideoDetails,
   getLiveChatMessageCount,
-  CONTENT_TYPES,
+  TIPOS_VIDEO,
 } from "./youtube.js";
 import { extractTranscript } from "./transcript.js";
 import {
   upsertVideoMetadata,
   updateVideoTranscript,
-  updateEnrichment,
+  updateClassificacao,
   getVideos,
   getVideoIdsPendingTranscript,
   getVideoTitlesUrls,
+  PAPEIS,
+  TIPOS_CONTEUDO,
+  PAPEIS_POR_TIPO_CONTEUDO,
+  listPessoas,
+  upsertPessoa,
+  updatePessoa,
+  deletePessoa,
+  setParticipacoes,
+  saveClassificacaoSugerida,
+  aplicarClassificacaoSugerida,
+  getCompeticoesConhecidas,
+  getProgramasConhecidos,
 } from "./db.js";
+import { sugerirClassificacao } from "./ai.js";
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -61,7 +74,7 @@ async function handleDetails(request, env) {
   const body = await request.json();
   const videoIds = (body.videoIds || []).slice(0, 50);
   const channelHandle = body.channelHandle || "";
-  const contentTypes = body.contentTypes || Object.keys(CONTENT_TYPES);
+  const tiposVideo = body.contentTypes || Object.keys(TIPOS_VIDEO);
 
   if (!videoIds.length) return json({ error: "videoIds vazio." }, 400);
 
@@ -69,7 +82,7 @@ async function handleDetails(request, env) {
   const saved = [];
 
   for (const video of videos) {
-    if (!contentTypes.includes(video.tipo_conteudo)) continue;
+    if (!tiposVideo.includes(video.tipo_video)) continue;
 
     let mensagensChat = null;
     let chatError = null;
@@ -83,7 +96,7 @@ async function handleDetails(request, env) {
     const row = {
       video_id: video.video_id,
       canal: video.canal,
-      tipo_conteudo: video.tipo_conteudo,
+      tipo_video: video.tipo_video,
       titulo: video.titulo,
       descricao: video.descricao,
       data_publicacao: video.data_publicacao,
@@ -96,7 +109,7 @@ async function handleDetails(request, env) {
     };
 
     await upsertVideoMetadata(env.DB, row);
-    saved.push({ video_id: video.video_id, titulo: video.titulo, tipo_conteudo: video.tipo_conteudo, chat_error: chatError });
+    saved.push({ video_id: video.video_id, titulo: video.titulo, tipo_video: video.tipo_video, chat_error: chatError });
   }
 
   return json({ saved });
@@ -155,16 +168,19 @@ async function handleExportCsv(url, env) {
   const videos = await getVideos(env.DB, { dateFrom, dateTo, contentTypes });
 
   const columns = [
-    "video_id", "canal", "tipo_conteudo", "titulo", "data_publicacao",
+    "video_id", "canal", "tipo_video", "tipo_conteudo", "titulo", "data_publicacao",
     "duracao_segundos", "views", "comentarios", "mensagens_chat",
-    "competicao", "narrador",
-    "comentarista_1", "comentarista_2", "comentarista_3", "comentarista_4", "comentarista_5",
-    "transcricao_sucesso", "url",
+    "competicao", "programa", "elenco", "transcricao_sucesso", "url",
   ];
 
   const lines = [columns.join(",")];
   for (const video of videos) {
-    const row = columns.map((col) => csvEscape(video[col]));
+    const row = columns.map((col) => {
+      if (col === "elenco") {
+        return csvEscape((video.participacoes || []).map((p) => `${p.nome} (${PAPEIS[p.papel] || p.papel})`).join("; "));
+      }
+      return csvEscape(video[col]);
+    });
     lines.push(row.join(","));
   }
 
@@ -176,20 +192,39 @@ async function handleExportCsv(url, env) {
   });
 }
 
+// Filtra participações para só manter papéis compatíveis com o tipo de
+// conteúdo do vídeo (transmissão -> narrador/comentarista/repórter;
+// programa -> apresentador; especial -> qualquer um). Sem tipo de conteúdo
+// definido, não restringe.
+function filtrarPapeisPermitidos(participacoes, tipoConteudo) {
+  const permitidos = tipoConteudo ? PAPEIS_POR_TIPO_CONTEUDO[tipoConteudo] : null;
+  if (!permitidos) return participacoes;
+  return participacoes.filter((p) => permitidos.includes(p.papel));
+}
+
+// body: { video_id, competicao, programa, tipo_conteudo, participacoes: [{ nome, papel }] }
 async function handleEnrich(request, env) {
   const body = await request.json();
-  const { video_id: videoId, competicao, narrador, comentaristas } = body;
+  const { video_id: videoId, competicao, programa, tipo_conteudo: tipoConteudo, participacoes } = body;
 
   if (!videoId) return json({ error: "video_id é obrigatório." }, 400);
 
-  await updateEnrichment(env.DB, videoId, competicao, { narrador, comentaristas });
+  await updateClassificacao(env.DB, videoId, { competicao, programa, tipoConteudo });
+  if (Array.isArray(participacoes)) {
+    await setParticipacoes(env.DB, videoId, filtrarPapeisPermitidos(participacoes, tipoConteudo));
+  }
+
   return json({ ok: true });
 }
 
-// Importação em lote por CSV. Colunas esperadas: video_id, competicao,
-// narrador, comentarista_1, comentarista_2, comentarista_3, comentarista_4,
-// comentarista_5. Outras colunas são ignoradas. Linhas com video_id
-// desconhecido são reportadas mas não travam o restante da importação.
+// Importação em lote por CSV, no formato "uma linha por pessoa": colunas
+// video_id, tipo_conteudo (transmissao/programa/especial, opcional),
+// competicao (opcional), programa (opcional), nome, papel
+// (narrador/comentarista/reporter/apresentador). Repita
+// tipo_conteudo/competicao/programa em cada linha do mesmo vídeo, ou deixe
+// só na primeira.
+// Outras colunas são ignoradas. Linhas com video_id desconhecido são
+// reportadas mas não travam o restante da importação.
 function parseCsv(text) {
   const lines = text.replace(/\r\n/g, "\n").split("\n").filter((l) => l.trim().length);
   if (!lines.length) return [];
@@ -232,31 +267,139 @@ async function handleEnrichImport(request, env) {
     return json({ error: "O CSV precisa ter uma coluna 'video_id'." }, 400);
   }
 
+  const papeisValidos = new Set(Object.keys(PAPEIS));
+  const tiposConteudoValidos = new Set(Object.keys(TIPOS_CONTEUDO));
+
+  // Agrupa as linhas por vídeo: cada vídeo pode ter várias linhas (uma por pessoa).
+  const porVideo = new Map();
+  for (const row of rows) {
+    const videoId = row.video_id?.trim();
+    if (!videoId) continue;
+
+    if (!porVideo.has(videoId)) porVideo.set(videoId, { participacoes: [] });
+    const entry = porVideo.get(videoId);
+
+    if (row.competicao?.trim()) entry.competicao = row.competicao.trim();
+    if (row.programa?.trim()) entry.programa = row.programa.trim();
+
+    const tipoConteudo = row.tipo_conteudo?.trim().toLowerCase();
+    if (tipoConteudo && tiposConteudoValidos.has(tipoConteudo)) entry.tipoConteudo = tipoConteudo;
+
+    if (row.nome?.trim()) {
+      const papel = (row.papel || "comentarista").trim().toLowerCase();
+      if (papeisValidos.has(papel)) entry.participacoes.push({ nome: row.nome.trim(), papel });
+    }
+  }
+
   let atualizados = 0;
   const naoEncontrados = [];
 
-  for (const row of rows) {
-    const videoId = row.video_id;
-    if (!videoId) continue;
-
-    const exists = await env.DB.prepare("SELECT 1 FROM videos WHERE video_id = ?").bind(videoId).first();
-    if (!exists) {
+  for (const [videoId, entry] of porVideo) {
+    const existing = await env.DB.prepare("SELECT tipo_conteudo FROM videos WHERE video_id = ?").bind(videoId).first();
+    if (!existing) {
       naoEncontrados.push(videoId);
       continue;
     }
 
-    const comentaristas = [1, 2, 3, 4, 5]
-      .map((n) => row[`comentarista_${n}`])
-      .filter(Boolean);
-
-    await updateEnrichment(env.DB, videoId, row.competicao || null, {
-      narrador: row.narrador || null,
-      comentaristas,
-    });
+    if (entry.competicao || entry.programa || entry.tipoConteudo) {
+      await updateClassificacao(env.DB, videoId, entry);
+    }
+    if (entry.participacoes.length) {
+      const tipoConteudoEfetivo = entry.tipoConteudo || existing.tipo_conteudo;
+      await setParticipacoes(env.DB, videoId, filtrarPapeisPermitidos(entry.participacoes, tipoConteudoEfetivo));
+    }
     atualizados++;
   }
 
   return json({ atualizados, naoEncontrados });
+}
+
+// ---------- elenco (pessoas cadastradas) ----------
+
+async function handleListPessoas(env) {
+  const pessoas = await listPessoas(env.DB);
+  return json({ pessoas, papeis: PAPEIS });
+}
+
+async function handleCreatePessoa(request, env) {
+  const body = await request.json();
+  if (!body.nome?.trim()) return json({ error: "nome é obrigatório." }, 400);
+
+  const id = await upsertPessoa(env.DB, body.nome, body.papel_padrao || null);
+  return json({ id });
+}
+
+async function handleUpdatePessoa(request, env) {
+  const body = await request.json();
+  if (!body.id || !body.nome?.trim()) return json({ error: "id e nome são obrigatórios." }, 400);
+
+  await updatePessoa(env.DB, body.id, { nome: body.nome.trim(), papelPadrao: body.papel_padrao || null });
+  return json({ ok: true });
+}
+
+async function handleDeletePessoa(request, env) {
+  const body = await request.json();
+  if (!body.id) return json({ error: "id é obrigatório." }, 400);
+
+  await deletePessoa(env.DB, body.id);
+  return json({ ok: true });
+}
+
+// ---------- sugestão de classificação (tipo de conteúdo/competição/programa/elenco) via IA ----------
+
+async function handleAiSugerir(request, env) {
+  const body = await request.json();
+  const videoIds = (body.videoIds || []).slice(0, 5);
+
+  if (!videoIds.length) return json({ error: "videoIds vazio." }, 400);
+  if (!env.AI) return json({ error: "IA (Workers AI) não está configurada neste Worker." }, 500);
+
+  const competicoesConhecidas = await getCompeticoesConhecidas(env.DB);
+  const programasConhecidas = await getProgramasConhecidos(env.DB);
+  const pessoasConhecidas = await listPessoas(env.DB);
+  const titles = await getVideoTitlesUrls(env.DB, videoIds);
+  const rows = await env.DB
+    .prepare(`SELECT video_id, titulo, descricao, transcricao_completa FROM videos WHERE video_id IN (${videoIds.map(() => "?").join(",")})`)
+    .bind(...videoIds)
+    .all();
+
+  const results = [];
+
+  for (const video of rows.results) {
+    const { tipoConteudo, competicao, programa, confianca, participantes, erro } = await sugerirClassificacao(env.AI, {
+      titulo: video.titulo,
+      descricao: video.descricao,
+      transcricao: video.transcricao_completa,
+      competicoesConhecidas,
+      programasConhecidas,
+      pessoasConhecidas,
+    });
+
+    if (tipoConteudo || competicao || programa) {
+      await saveClassificacaoSugerida(env.DB, video.video_id, { tipoConteudo, competicao, programa, confianca });
+    }
+
+    results.push({
+      video_id: video.video_id,
+      titulo: titles[video.video_id]?.titulo || video.titulo,
+      tipo_conteudo_sugerido: tipoConteudo,
+      competicao_sugerida: competicao,
+      programa_sugerido: programa,
+      confianca,
+      participantes_sugeridos: participantes || [],
+      erro,
+    });
+  }
+
+  return json({ results });
+}
+
+async function handleAiAplicarSugestao(request, env) {
+  const body = await request.json();
+  if (!body.video_id) return json({ error: "video_id é obrigatório." }, 400);
+
+  await aplicarClassificacaoSugerida(env.DB, body.video_id);
+  return json({ ok: true });
 }
 
 async function autoCollect(env, days = 2) {
@@ -289,7 +432,7 @@ async function autoCollect(env, days = 2) {
       await upsertVideoMetadata(env.DB, {
         video_id: video.video_id,
         canal: video.canal,
-        tipo_conteudo: video.tipo_conteudo,
+        tipo_video: video.tipo_video,
         titulo: video.titulo,
         descricao: video.descricao,
         data_publicacao: video.data_publicacao,
@@ -335,6 +478,24 @@ export default {
       }
       if (url.pathname === "/api/enrich/import" && request.method === "POST") {
         return await handleEnrichImport(request, env);
+      }
+      if (url.pathname === "/api/pessoas" && request.method === "GET") {
+        return await handleListPessoas(env);
+      }
+      if (url.pathname === "/api/pessoas" && request.method === "POST") {
+        return await handleCreatePessoa(request, env);
+      }
+      if (url.pathname === "/api/pessoas/update" && request.method === "POST") {
+        return await handleUpdatePessoa(request, env);
+      }
+      if (url.pathname === "/api/pessoas/delete" && request.method === "POST") {
+        return await handleDeletePessoa(request, env);
+      }
+      if (url.pathname === "/api/ai/sugerir" && request.method === "POST") {
+        return await handleAiSugerir(request, env);
+      }
+      if (url.pathname === "/api/ai/aplicar-sugestao" && request.method === "POST") {
+        return await handleAiAplicarSugestao(request, env);
       }
     } catch (error) {
       return json({ error: String(error?.message || error) }, 500);

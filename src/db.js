@@ -4,13 +4,13 @@ export async function upsertVideoMetadata(db, row) {
   await db
     .prepare(
       `INSERT INTO videos (
-        video_id, canal, tipo_conteudo, titulo, descricao,
+        video_id, canal, tipo_video, titulo, descricao,
         data_publicacao, duracao_segundos, views, comentarios,
         mensagens_chat, url, coletado_em
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(video_id) DO UPDATE SET
         canal=excluded.canal,
-        tipo_conteudo=excluded.tipo_conteudo,
+        tipo_video=excluded.tipo_video,
         titulo=excluded.titulo,
         descricao=excluded.descricao,
         data_publicacao=excluded.data_publicacao,
@@ -24,7 +24,7 @@ export async function upsertVideoMetadata(db, row) {
     .bind(
       row.video_id,
       row.canal,
-      row.tipo_conteudo,
+      row.tipo_video,
       row.titulo,
       row.descricao,
       row.data_publicacao,
@@ -58,34 +58,178 @@ export async function updateVideoTranscript(db, videoId, fields) {
     .run();
 }
 
-// elenco: { narrador, comentaristas: [até 5 nomes] }
-export async function updateEnrichment(db, videoId, competicao, elenco) {
-  const comentaristas = (elenco?.comentaristas || []).slice(0, 5);
+export const PAPEIS = {
+  narrador: "Narrador",
+  comentarista: "Comentarista",
+  reporter: "Repórter",
+  apresentador: "Apresentador",
+};
 
+// Classificação editorial do vídeo (diferente do tipo técnico
+// live/short/video). Cada uma libera um conjunto diferente de papéis:
+// uma transmissão tem narrador/comentaristas/repórter; um programa tem
+// apresentador(es); um especial não tem restrição.
+export const TIPOS_CONTEUDO = {
+  transmissao: "Transmissão",
+  programa: "Programa",
+  especial: "Especial",
+};
+
+export const PAPEIS_POR_TIPO_CONTEUDO = {
+  transmissao: ["narrador", "comentarista", "reporter"],
+  programa: ["apresentador"],
+  especial: Object.keys(PAPEIS),
+};
+
+// Atualiza só os campos presentes no objeto (chave existe, mesmo que valor
+// seja null para limpar o campo). Um campo omitido (undefined/ausente)
+// mantém o valor que já estava salvo — importante para a importação por
+// CSV, onde uma linha pode trazer só o programa e não a competição, sem
+// apagar o que já tinha sido preenchido antes.
+export async function updateClassificacao(db, videoId, campos) {
+  const colunaPorChave = { competicao: "competicao", programa: "programa", tipoConteudo: "tipo_conteudo" };
+  const sets = [];
+  const params = [];
+
+  for (const [chave, coluna] of Object.entries(colunaPorChave)) {
+    if (chave in campos) {
+      sets.push(`${coluna} = ?`);
+      params.push(campos[chave] || null);
+    }
+  }
+
+  if (!sets.length) return;
+
+  sets.push("enriquecido_em = ?");
+  params.push(new Date().toISOString(), videoId);
+
+  await db.prepare(`UPDATE videos SET ${sets.join(", ")} WHERE video_id = ?`).bind(...params).run();
+}
+
+// ---------- pessoas (elenco) ----------
+
+export async function listPessoas(db) {
+  const result = await db.prepare(`SELECT * FROM pessoas ORDER BY nome`).all();
+  return result.results;
+}
+
+export async function upsertPessoa(db, nome, papelPadrao) {
+  const nomeLimpo = nome.trim();
+
+  await db
+    .prepare(`INSERT INTO pessoas (nome, papel_padrao, criado_em) VALUES (?, ?, ?) ON CONFLICT(nome) DO NOTHING`)
+    .bind(nomeLimpo, papelPadrao || null, new Date().toISOString())
+    .run();
+
+  const row = await db.prepare(`SELECT id FROM pessoas WHERE nome = ?`).bind(nomeLimpo).first();
+  return row.id;
+}
+
+export async function updatePessoa(db, id, { nome, papelPadrao }) {
+  await db
+    .prepare(`UPDATE pessoas SET nome = ?, papel_padrao = ? WHERE id = ?`)
+    .bind(nome, papelPadrao || null, id)
+    .run();
+}
+
+export async function deletePessoa(db, id) {
+  await db.prepare(`DELETE FROM participacoes WHERE pessoa_id = ?`).bind(id).run();
+  await db.prepare(`DELETE FROM pessoas WHERE id = ?`).bind(id).run();
+}
+
+// ---------- participações (elenco por vídeo) ----------
+
+// participacoes: [{ nome, papel }]
+export async function setParticipacoes(db, videoId, participacoes) {
+  await db.prepare(`DELETE FROM participacoes WHERE video_id = ?`).bind(videoId).run();
+
+  for (const { nome, papel } of participacoes) {
+    if (!nome?.trim() || !papel) continue;
+
+    const pessoaId = await upsertPessoa(db, nome, papel);
+
+    await db
+      .prepare(`INSERT OR IGNORE INTO participacoes (video_id, pessoa_id, papel) VALUES (?, ?, ?)`)
+      .bind(videoId, pessoaId, papel)
+      .run();
+  }
+
+  await db
+    .prepare(`UPDATE videos SET enriquecido_em = ? WHERE video_id = ?`)
+    .bind(new Date().toISOString(), videoId)
+    .run();
+}
+
+async function getParticipacoesPorVideo(db, videoIds) {
+  if (!videoIds.length) return {};
+
+  const placeholders = videoIds.map(() => "?").join(",");
+  const stmt = db.prepare(
+    `SELECT part.video_id, part.papel, p.nome
+     FROM participacoes part JOIN pessoas p ON p.id = part.pessoa_id
+     WHERE part.video_id IN (${placeholders})
+     ORDER BY p.nome`
+  );
+  const result = await stmt.bind(...videoIds).all();
+
+  const map = {};
+  for (const row of result.results) {
+    if (!map[row.video_id]) map[row.video_id] = [];
+    map[row.video_id].push({ nome: row.nome, papel: row.papel });
+  }
+  return map;
+}
+
+// ---------- sugestão de classificação (tipo de conteúdo/competição/programa) via IA ----------
+
+export async function saveClassificacaoSugerida(db, videoId, { tipoConteudo, competicao, programa, confianca }) {
   await db
     .prepare(
       `UPDATE videos
-       SET competicao = ?, narrador = ?,
-           comentarista_1 = ?, comentarista_2 = ?, comentarista_3 = ?,
-           comentarista_4 = ?, comentarista_5 = ?,
-           enriquecido_em = ?
+       SET tipo_conteudo_sugerido = ?, competicao_sugerida = ?, programa_sugerido = ?,
+           competicao_confianca = ?, competicao_sugestao_em = ?
        WHERE video_id = ?`
     )
     .bind(
+      tipoConteudo || null,
       competicao || null,
-      elenco?.narrador || null,
-      comentaristas[0] || null,
-      comentaristas[1] || null,
-      comentaristas[2] || null,
-      comentaristas[3] || null,
-      comentaristas[4] || null,
+      programa || null,
+      confianca ?? null,
       new Date().toISOString(),
       videoId
     )
     .run();
 }
 
-function buildFilterClause(dateFrom, dateTo, contentTypes) {
+export async function aplicarClassificacaoSugerida(db, videoId) {
+  await db
+    .prepare(
+      `UPDATE videos
+       SET tipo_conteudo = COALESCE(tipo_conteudo_sugerido, tipo_conteudo),
+           competicao = COALESCE(competicao_sugerida, competicao),
+           programa = COALESCE(programa_sugerido, programa),
+           enriquecido_em = ?
+       WHERE video_id = ?`
+    )
+    .bind(new Date().toISOString(), videoId)
+    .run();
+}
+
+export async function getCompeticoesConhecidas(db) {
+  const result = await db
+    .prepare(`SELECT DISTINCT competicao FROM videos WHERE competicao IS NOT NULL AND competicao != ''`)
+    .all();
+  return result.results.map((r) => r.competicao);
+}
+
+export async function getProgramasConhecidos(db) {
+  const result = await db
+    .prepare(`SELECT DISTINCT programa FROM videos WHERE programa IS NOT NULL AND programa != ''`)
+    .all();
+  return result.results.map((r) => r.programa);
+}
+
+function buildFilterClause(dateFrom, dateTo, tiposVideo) {
   const clauses = [];
   const params = [];
 
@@ -97,9 +241,9 @@ function buildFilterClause(dateFrom, dateTo, contentTypes) {
     clauses.push("date(data_publicacao) <= date(?)");
     params.push(dateTo);
   }
-  if (contentTypes && contentTypes.length) {
-    clauses.push(`tipo_conteudo IN (${contentTypes.map(() => "?").join(",")})`);
-    params.push(...contentTypes);
+  if (tiposVideo && tiposVideo.length) {
+    clauses.push(`tipo_video IN (${tiposVideo.map(() => "?").join(",")})`);
+    params.push(...tiposVideo);
   }
 
   return { clauses, params };
@@ -112,23 +256,24 @@ export async function getVideos(db, { dateFrom, dateTo, contentTypes } = {}) {
   const stmt = db.prepare(`SELECT * FROM videos ${where} ORDER BY data_publicacao DESC`);
   const result = await stmt.bind(...params).all();
 
-  return result.results.map(addElencoFields);
+  const videoIds = result.results.map((r) => r.video_id);
+  const participacoesPorVideo = await getParticipacoesPorVideo(db, videoIds);
+
+  return result.results.map((row) => addElencoFields(row, participacoesPorVideo[row.video_id] || []));
 }
 
-// Deriva campos convenientes para o frontend a partir de
-// narrador + comentarista_1..5: lista do elenco e uma chave de combinação
-// (mesmo conjunto de pessoas, ordem alfabética) para agrupar vídeos que têm
-// exatamente a mesma escalação.
-function addElencoFields(row) {
-  const comentaristas = [
-    row.comentarista_1, row.comentarista_2, row.comentarista_3,
-    row.comentarista_4, row.comentarista_5,
-  ].filter(Boolean);
+// Deriva campos convenientes para o frontend a partir das participações
+// (pessoa + papel): lista de nomes e uma chave de combinação (mesmo
+// conjunto de pessoas+papéis, ordem alfabética) para agrupar vídeos que
+// têm exatamente a mesma escalação.
+function addElencoFields(row, participacoes) {
+  const elenco = participacoes.map((p) => p.nome);
+  const combinacao = [...participacoes]
+    .sort((a, b) => a.nome.localeCompare(b.nome))
+    .map((p) => `${p.nome} (${PAPEIS[p.papel] || p.papel})`)
+    .join(" + ");
 
-  const elenco = [row.narrador, ...comentaristas].filter(Boolean);
-  const combinacao = [...elenco].sort((a, b) => a.localeCompare(b)).join(" + ");
-
-  return { ...row, comentaristas, elenco, combinacao_elenco: combinacao || null };
+  return { ...row, participacoes, elenco, combinacao_elenco: combinacao || null };
 }
 
 export async function getVideoIdsPendingTranscript(db, { dateFrom, dateTo, contentTypes } = {}) {
