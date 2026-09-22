@@ -67,8 +67,13 @@ npm run db:migrate:remote
 ### 4. Configurar a chave da API do YouTube
 
 Pegue uma chave em https://console.cloud.google.com/apis/credentials
-(com a "YouTube Data API v3" ativada) e configure como segredo do Worker
-(não fica no código, não vai para o GitHub):
+(com a "YouTube Data API v3" ativada).
+
+Se você for usar o deploy automático pelo GitHub Actions (próxima seção),
+basta cadastrar essa chave como o segredo `YOUTUBE_API_KEY` no GitHub — o
+workflow já configura ela no Worker sozinho a cada deploy.
+
+Se preferir configurar na mão pelo seu computador, use:
 
 ```bash
 npx wrangler secret put YOUTUBE_API_KEY
@@ -100,18 +105,21 @@ Ao final, o comando mostra a URL pública (algo como
 ## Publicar automaticamente a cada push (GitHub Actions)
 
 Já existe um workflow em `.github/workflows/deploy.yml` que publica sozinho
-sempre que houver um push na branch `main`. Para ativar, configure dois
+sempre que houver um push na branch `main`. Para ativar, configure estes
 segredos no repositório do GitHub (Settings → Secrets and variables →
-Actions):
+Actions → New repository secret):
 
 - `CLOUDFLARE_API_TOKEN` — crie em
   https://dash.cloudflare.com/profile/api-tokens (use o template "Edit
   Cloudflare Workers").
 - `CLOUDFLARE_ACCOUNT_ID` — aparece na barra lateral direita do painel da
   Cloudflare.
+- `YOUTUBE_API_KEY` — a mesma chave do passo 4. Opcional aqui (o Worker
+  também aceita ser configurado na mão via `wrangler secret put`), mas
+  cadastrando esse segredo o workflow já deixa tudo pronto sozinho.
 
-Sem esses dois segredos configurados, o deploy automático falha (mas isso
-não afeta o código em si — dá para publicar manualmente com `npm run
+Sem os dois primeiros segredos configurados, o deploy automático falha (mas
+isso não afeta o código em si — dá para publicar manualmente com `npm run
 deploy` a qualquer momento).
 
 ## Limites a saber

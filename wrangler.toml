@@ -12,7 +12,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "statscaze"
-database_id = "COLOQUE_AQUI_O_ID_DO_BANCO"
+database_id = "78573859-f9ef-4917-8361-05f5d77bc2e5"
 
 # Coleta automática diária (ajuste o horário se quiser). UTC.
 [triggers]
