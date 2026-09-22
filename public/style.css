@@ -17,31 +17,34 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
 }
 
 .layout { display: flex; min-height: 100vh; }
 .layout-full { display: block; }
 
-.topbar { padding: 20px 24px 0; }
-.topbar h1 { margin: 0; font-size: 20px; }
+.topbar { padding: 14px 16px 0; }
+.topbar h1 { margin: 0; font-size: 18px; }
 .subtitle { color: var(--text-muted); margin: 4px 0 0; font-size: 13px; }
 
-.mapeamento-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: end; }
+.mapeamento-filtros { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; align-items: end; }
 .tipos-video-checkboxes { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
 
 label { display: block; font-size: 13px; margin-bottom: 10px; }
 label.checkbox { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 label.checkbox input { width: auto; }
 
-input[type="text"], input[type="date"], select {
+/* font-size 16px nos campos evita o zoom automático do Safari/iOS ao focar. */
+input[type="text"], input[type="date"], input[type="number"], select {
   width: 100%;
-  padding: 8px;
+  padding: 10px 8px;
   margin-top: 4px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .hint { font-size: 12px; color: var(--text-muted); margin: 0 0 10px; }
@@ -49,26 +52,26 @@ input[type="text"], input[type="date"], select {
 button, .button {
   display: inline-block;
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: none;
   border-radius: 6px;
   background: var(--accent-dim);
   color: var(--text);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
   text-align: center;
   text-decoration: none;
 }
 button.primary { background: var(--accent); color: #06121f; font-weight: 600; }
 button:disabled { opacity: .5; cursor: not-allowed; }
 
-.content { flex: 1; padding: 24px; overflow-x: hidden; }
+.content { flex: 1; padding: 16px; overflow-x: hidden; max-width: 100%; }
 
 .execucao { margin-bottom: 20px; }
 .progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; display: none; }
 .progress-bar.active { display: block; }
 .progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
-.progress-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.progress-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .progress-text { font-size: 13px; color: var(--text-muted); margin: 6px 0; flex: 1; }
 button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
 #btnPararExecucao { width: auto; padding: 6px 14px; font-size: 12px; display: none; flex-shrink: 0; }
@@ -86,13 +89,27 @@ button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
 }
 .log-area.active { display: block; }
 
-.tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+/* Nav com muitos itens: rola na horizontal em vez de quebrar linha ou
+   espremer os botões — mais previsível em telas de celular. */
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin: 0 -16px 16px;
+  padding: 0 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
 .tab-btn {
   width: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
   background: none;
   color: var(--text-muted);
   border-radius: 0;
-  padding: 10px 16px;
+  padding: 10px 14px;
+  font-size: 14px;
   border-bottom: 2px solid transparent;
 }
 .tab-btn.active { color: var(--text); border-bottom-color: var(--accent); }
@@ -100,13 +117,24 @@ button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
 
-.subtabs { margin-top: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+.subtabs {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  margin: 4px -16px 16px;
+  padding: 0 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
 .subtab-btn {
   width: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
   background: none;
   color: var(--text-muted);
   border-radius: 0;
-  padding: 8px 14px;
+  padding: 8px 12px;
   font-size: 13px;
   border-bottom: 2px solid transparent;
 }
@@ -114,11 +142,11 @@ button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
 .subtab-panel { display: none; }
 .subtab-panel.active { display: block; }
 
-.dash-filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 12px; }
+.dash-filters-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin-bottom: 12px; }
 .dash-filters-grid label { font-size: 13px; margin-bottom: 0; }
-.dash-filters-grid select[multiple] { width: 100%; min-height: 90px; }
-.dash-range { display: flex; gap: 6px; }
-.dash-range input { width: auto; flex: 1; min-width: 0; }
+.dash-filters-grid select[multiple] { width: 100%; min-height: 70px; }
+.dash-range { display: flex; flex-wrap: wrap; gap: 6px; }
+.dash-range input { width: auto; flex: 1; min-width: 90px; }
 
 .cenarios-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 12px; }
 .cenario-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
@@ -133,7 +161,7 @@ button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
 .diff-pos { color: var(--success); font-size: 12px; }
 .diff-neg { color: var(--danger); font-size: 12px; }
 
-.panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.panel-header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 14px; }
 .panel-header .actions .button { width: auto; padding: 8px 16px; }
 
 .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; }
@@ -165,13 +193,14 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .bar-track { background: var(--bg); border-radius: 4px; overflow: hidden; height: 16px; }
 .bar-fill { height: 100%; background: var(--accent); }
 
-.modo-teste-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+.modo-teste-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; }
 .modo-teste-bar .status-msg { padding: 0; font-weight: 600; }
+.modo-teste-bar button { width: auto; }
 
 .videos-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 14px; }
 .videos-filtros label { font-size: 13px; margin-bottom: 0; }
-.videos-filtros input, .videos-filtros select { width: auto; min-width: 160px; }
-.videos-filtros button { margin-bottom: 1px; }
+.videos-filtros input, .videos-filtros select { width: auto; min-width: 140px; }
+.videos-filtros button { width: auto; margin-bottom: 1px; }
 
 th[data-sort] { cursor: pointer; user-select: none; }
 th[data-sort]:hover { color: var(--text); }
@@ -231,10 +260,18 @@ td input[type="text"] {
 td button.save-row { width: auto; padding: 4px 10px; font-size: 12px; }
 .acoes-video-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
 
-@media (max-width: 800px) {
-  .layout { flex-direction: column; }
-  .mapeamento-filtros { grid-template-columns: 1fr; }
+/* CSS mobile-first: os estilos acima já são pensados pra tela pequena
+   (nav com scroll horizontal, colunas empilhando sozinhas, campos com
+   16px pra não dar zoom no iOS). A partir daqui só "abrimos" mais
+   espaço/tamanho conforme a tela cresce. */
+@media (min-width: 700px) {
+  .topbar { padding: 20px 24px 0; }
+  .topbar h1 { font-size: 20px; }
+  .content { padding: 24px; }
+  .tabs, .subtabs { margin-left: -24px; margin-right: -24px; padding-left: 24px; padding-right: 24px; }
+  .dash-filters-grid select[multiple] { min-height: 90px; }
 }
+
 
 /* Importar CSV: recurso avançado, sempre com menos destaque que o resto da tela */
 .csv-import-collapse { margin-bottom: 16px; }
