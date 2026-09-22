@@ -126,14 +126,52 @@
           </div>
         </details>
 
+        <div class="videos-filtros">
+          <label>Buscar por título
+            <input id="videosFiltroTitulo" type="text" placeholder="Digite para filtrar..." />
+          </label>
+          <label>Tipo
+            <select id="videosFiltroTipoVideo">
+              <option value="">Todos</option>
+              <option value="live">Live</option>
+              <option value="short">Short</option>
+              <option value="video">Vídeo normal</option>
+            </select>
+          </label>
+          <label>Tipo de conteúdo
+            <select id="videosFiltroTipoConteudo"><option value="">Todos</option></select>
+          </label>
+          <label>Competição
+            <select id="videosFiltroCompeticao"><option value="">Todas</option></select>
+          </label>
+          <label>Programa
+            <select id="videosFiltroPrograma"><option value="">Todos</option></select>
+          </label>
+          <button id="btnLimparFiltrosVideos" type="button" class="save-row">Limpar filtros</button>
+        </div>
+
         <div class="table-wrap">
           <table id="videosTable">
             <thead>
               <tr>
-                <th>Thumb</th><th>ID (YouTube)</th><th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
-                <th>Views</th><th>Curtidas</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
-                <th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
-                <th>Elenco do vídeo</th><th>Avaliação IA</th><th>Ações</th>
+                <th>Thumb</th>
+                <th data-sort="video_id">ID (YouTube)</th>
+                <th data-sort="tipo_video">Tipo</th>
+                <th data-sort="titulo">Título</th>
+                <th data-sort="data_publicacao">Publicação</th>
+                <th data-sort="duracao_segundos">Duração</th>
+                <th data-sort="views">Views</th>
+                <th data-sort="likes">Curtidas</th>
+                <th data-sort="comentarios">Comentários</th>
+                <th data-sort="mensagens_chat">Chat</th>
+                <th>Transcrição</th>
+                <th>Link</th>
+                <th data-sort="tipo_conteudo">Tipo de conteúdo</th>
+                <th data-sort="competicao">Competição</th>
+                <th data-sort="programa">Programa</th>
+                <th>Elenco do vídeo</th>
+                <th>Avaliação IA</th>
+                <th>Ações</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -312,6 +350,7 @@
           <button class="subtab-btn" data-subtab="competicao">Por competição</button>
           <button class="subtab-btn" data-subtab="programa">Por programa</button>
           <button class="subtab-btn" data-subtab="elenco">Por elenco</button>
+          <button class="subtab-btn" data-subtab="comparar">Comparar elenco</button>
           <button class="subtab-btn" data-subtab="duracao">Por duração</button>
           <button class="subtab-btn" data-subtab="data">Por data</button>
         </nav>
@@ -404,6 +443,56 @@
           </div>
 
           <div id="castMemberDetail"></div>
+        </section>
+
+        <section id="subtab-comparar" class="subtab-panel">
+          <div class="chart-card">
+            <h4>Comparar cenários de escalação</h4>
+            <p class="hint">
+              Monte 2 ou mais cenários (combinação de pessoa + papel) e compare o resultado entre
+              eles, com a diferença percentual sempre em relação ao primeiro cenário. Considera os
+              vídeos que tiveram TODAS as pessoas do cenário nos papéis indicados (podendo ter mais
+              gente além delas). Usa o recorte definido nos filtros acima.
+            </p>
+
+            <div id="cenariosContainer" class="cenarios-container"></div>
+            <button id="btnAdicionarCenario" type="button" class="save-row">+ Adicionar cenário</button>
+
+            <div class="table-wrap">
+              <table id="comparadorCenariosTable">
+                <thead><tr id="comparadorCenariosHeader"></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <h4>Melhor parceiro de um membro</h4>
+            <p class="hint">Com quem essa pessoa mais performa bem, considerando os vídeos em que apareceram juntos.</p>
+            <label>Membro
+              <select id="parceiroFiltroMembro"><option value="">(selecione)</option></select>
+            </label>
+            <div class="table-wrap">
+              <table id="melhorParceiroTable">
+                <thead><tr><th>Parceiro(a)</th><th>Vídeos juntos</th><th>Views (média)</th><th>Engajamento</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <h4>Mesma pessoa em papéis diferentes</h4>
+            <p class="hint">Compara o desempenho da mesma pessoa em cada papel que ela já teve.</p>
+            <label>Membro
+              <select id="papeisPorPessoaMembro"><option value="">(selecione)</option></select>
+            </label>
+            <div class="table-wrap">
+              <table id="papeisPorPessoaTable">
+                <thead><tr><th>Papel</th><th>Vídeos</th><th>Views (média)</th><th>Engajamento</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <section id="subtab-duracao" class="subtab-panel">

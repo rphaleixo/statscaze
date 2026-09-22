@@ -120,6 +120,19 @@ button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
 .dash-range { display: flex; gap: 6px; }
 .dash-range input { width: auto; flex: 1; min-width: 0; }
 
+.cenarios-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-bottom: 12px; }
+.cenario-card { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.cenario-card .cenario-titulo { width: 100%; margin-bottom: 8px; font-weight: 600; }
+.cenario-card .elenco-pills { margin-bottom: 8px; min-height: 20px; }
+.cenario-card .cenario-add-form { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.cenario-card .cenario-add-form select { width: auto; flex: 1; min-width: 100px; }
+.cenario-card .cenario-add-form button { width: auto; padding: 6px 10px; flex-shrink: 0; }
+.cenario-card .btn-remover-cenario { margin-top: 8px; }
+.amostra-aviso { color: var(--text-muted); font-size: 12px; }
+.amostra-aviso.baixa { color: var(--danger); }
+.diff-pos { color: var(--success); font-size: 12px; }
+.diff-neg { color: var(--danger); font-size: 12px; }
+
 .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .panel-header .actions .button { width: auto; padding: 8px 16px; }
 
@@ -154,6 +167,15 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
 .modo-teste-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
 .modo-teste-bar .status-msg { padding: 0; font-weight: 600; }
+
+.videos-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 14px; }
+.videos-filtros label { font-size: 13px; margin-bottom: 0; }
+.videos-filtros input, .videos-filtros select { width: auto; min-width: 160px; }
+.videos-filtros button { margin-bottom: 1px; }
+
+th[data-sort] { cursor: pointer; user-select: none; }
+th[data-sort]:hover { color: var(--text); }
+th[data-sort].sorted::after { content: " " attr(data-sort-arrow); }
 
 .status-msg { font-size: 13px; padding: 8px 0; }
 .status-msg.error { color: var(--danger); }

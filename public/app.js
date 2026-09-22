@@ -474,6 +474,9 @@ async function carregarPessoas() {
   pessoasCache = res.pessoas || [];
   renderPessoasTable();
   renderPessoasDatalist();
+  renderCenarios();
+  populateParceiroMembroSelect();
+  populatePapeisPorPessoaSelect();
 }
 
 async function carregarCompeticoes() {
@@ -497,6 +500,7 @@ async function carregarPapeis() {
   renderPapeisTable();
   renderVideosTable();
   renderPessoasStats();
+  renderCenarios();
 }
 
 function getOrCreateDatalist(id) {
@@ -525,12 +529,113 @@ function renderBarChart(container, entries) {
     .join("");
 }
 
+let videosSortField = null;
+let videosSortDir = 1;
+
+function populateVideosFiltros() {
+  const tipoConteudoSelect = el("videosFiltroTipoConteudo");
+  const competicaoSelect = el("videosFiltroCompeticao");
+  const programaSelect = el("videosFiltroPrograma");
+  const prevTipoConteudo = tipoConteudoSelect.value;
+  const prevCompeticao = competicaoSelect.value;
+  const prevPrograma = programaSelect.value;
+
+  const tiposAtivos = tiposConteudoCache.filter((t) => !t.arquivado);
+  tipoConteudoSelect.innerHTML = '<option value="">Todos</option>' +
+    tiposAtivos.map((t) => `<option value="${escapeAttr(t.nome)}">${t.nome}</option>`).join("");
+
+  const competicoes = new Set();
+  const programas = new Set();
+  for (const v of videosCache) {
+    if (v.competicao) competicoes.add(v.competicao);
+    if (v.programa) programas.add(v.programa);
+  }
+  competicaoSelect.innerHTML = '<option value="">Todas</option>' +
+    [...competicoes].sort((a, b) => a.localeCompare(b)).map((c) => `<option value="${escapeAttr(c)}">${c}</option>`).join("");
+  programaSelect.innerHTML = '<option value="">Todos</option>' +
+    [...programas].sort((a, b) => a.localeCompare(b)).map((p) => `<option value="${escapeAttr(p)}">${p}</option>`).join("");
+
+  if (tiposAtivos.some((t) => t.nome === prevTipoConteudo)) tipoConteudoSelect.value = prevTipoConteudo;
+  if (competicoes.has(prevCompeticao)) competicaoSelect.value = prevCompeticao;
+  if (programas.has(prevPrograma)) programaSelect.value = prevPrograma;
+}
+
+function videosFiltradosOrdenados() {
+  const titulo = el("videosFiltroTitulo").value.trim().toLowerCase();
+  const tipoVideo = el("videosFiltroTipoVideo").value;
+  const tipoConteudo = el("videosFiltroTipoConteudo").value;
+  const competicao = el("videosFiltroCompeticao").value;
+  const programa = el("videosFiltroPrograma").value;
+
+  let lista = videosCache.filter((v) => {
+    if (titulo && !(v.titulo || "").toLowerCase().includes(titulo)) return false;
+    if (tipoVideo && v.tipo_video !== tipoVideo) return false;
+    if (tipoConteudo && v.tipo_conteudo !== tipoConteudo) return false;
+    if (competicao && v.competicao !== competicao) return false;
+    if (programa && v.programa !== programa) return false;
+    return true;
+  });
+
+  if (videosSortField) {
+    lista = [...lista].sort((a, b) => {
+      const va = a[videosSortField];
+      const vb = b[videosSortField];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === "number" || typeof vb === "number") return (va - vb) * videosSortDir;
+      return String(va).localeCompare(String(vb)) * videosSortDir;
+    });
+  }
+
+  return lista;
+}
+
+function atualizarIndicadoresOrdenacao() {
+  document.querySelectorAll("#videosTable th[data-sort]").forEach((th) => {
+    th.classList.remove("sorted");
+    th.removeAttribute("data-sort-arrow");
+    if (th.dataset.sort === videosSortField) {
+      th.classList.add("sorted");
+      th.setAttribute("data-sort-arrow", videosSortDir === 1 ? "▲" : "▼");
+    }
+  });
+}
+
+document.querySelectorAll("#videosTable th[data-sort]").forEach((th) => {
+  th.addEventListener("click", () => {
+    if (videosSortField === th.dataset.sort) {
+      videosSortDir *= -1;
+    } else {
+      videosSortField = th.dataset.sort;
+      videosSortDir = 1;
+    }
+    renderVideosTable();
+  });
+});
+
+["videosFiltroTitulo"].forEach((id) => el(id).addEventListener("input", renderVideosTable));
+["videosFiltroTipoVideo", "videosFiltroTipoConteudo", "videosFiltroCompeticao", "videosFiltroPrograma"].forEach((id) =>
+  el(id).addEventListener("change", renderVideosTable)
+);
+el("btnLimparFiltrosVideos").addEventListener("click", () => {
+  el("videosFiltroTitulo").value = "";
+  ["videosFiltroTipoVideo", "videosFiltroTipoConteudo", "videosFiltroCompeticao", "videosFiltroPrograma"].forEach((id) => {
+    el(id).value = "";
+  });
+  renderVideosTable();
+});
+
 function renderVideosTable() {
-  el("videosCount").textContent = `${videosCache.length} vídeo(s) no período/tipo selecionado`;
+  populateVideosFiltros();
+  const lista = videosFiltradosOrdenados();
+  el("videosCount").textContent = `${lista.length} de ${videosCache.length} vídeo(s) no período/tipo selecionado`;
+  atualizarIndicadoresOrdenacao();
+
   const tbody = document.querySelector("#videosTable tbody");
   tbody.innerHTML = "";
 
-  for (const v of videosCache) {
+  for (const v of lista) {
     tbody.appendChild(criarLinhaVideo(v));
   }
 }
@@ -1085,6 +1190,9 @@ function renderDashboards() {
   renderPorDuracao(videos);
   renderPorData(videos);
   renderCastDashboard(videos);
+  compararCenarios();
+  renderMelhorParceiro();
+  renderPapeisPorPessoa();
 }
 
 ["dashFiltroCompeticao", "dashFiltroPrograma", "dashFiltroTipoVideo", "dashFiltroElenco", "dashFiltroPapel"].forEach((id) => {
@@ -1560,6 +1668,257 @@ function renderCastDashboard(videos) {
 el("castFiltroMembro").addEventListener("change", () => {
   renderCastMemberDetail(dashFilteredVideos());
 });
+
+// ---------- sub-aba "Comparar elenco" ----------
+
+function metricasDeVideos(videos) {
+  const views = sum(videos, "views");
+  const likes = sum(videos, "likes");
+  const comentarios = sum(videos, "comentarios");
+  const chat = sum(videos, "mensagens_chat");
+  return {
+    qtd: videos.length,
+    views,
+    mediaViews: videos.length ? Math.round(views / videos.length) : 0,
+    likes,
+    comentarios,
+    chat,
+    engajamento: engajamento({ views, likes, comentarios, chat }),
+  };
+}
+
+function pctDiff(valor, base) {
+  if (!base) return null;
+  return ((valor - base) / base) * 100;
+}
+
+function formatPctDiff(x) {
+  if (x == null) return "—";
+  return `${x > 0 ? "+" : ""}${x.toFixed(1)}%`;
+}
+
+function pessoaOptionsHtml() {
+  return pessoasCache.map((p) => `<option value="${escapeAttr(p.nome)}">${p.nome}</option>`).join("");
+}
+
+// Um vídeo "bate" com o cenário se TODAS as pessoas do cenário participaram
+// dele com o papel indicado — pode ter mais gente no vídeo além delas.
+function videosDoCenario(videos, pares) {
+  if (!pares.length) return [];
+  return videos.filter((v) => {
+    const participacoes = v.participacoes || [];
+    return pares.every((par) => participacoes.some((p) => p.nome === par.nome && p.papel === par.papel));
+  });
+}
+
+let cenarios = [
+  { id: 1, nome: "Cenário A", pares: [] },
+  { id: 2, nome: "Cenário B", pares: [] },
+];
+let proximoCenarioId = 3;
+
+function renderCenarios() {
+  const container = el("cenariosContainer");
+  container.innerHTML = cenarios
+    .map(
+      (c) => `
+    <div class="cenario-card" data-cenario-id="${c.id}">
+      <input type="text" class="cenario-titulo" value="${escapeAttr(c.nome)}" data-cenario-nome="${c.id}" />
+      <div class="elenco-pills" data-cenario-pills="${c.id}"></div>
+      <div class="cenario-add-form">
+        <select data-cenario-pessoa="${c.id}">${pessoaOptionsHtml()}</select>
+        <select data-cenario-papel="${c.id}">${papelOptionsHtml()}</select>
+        <button type="button" data-cenario-add="${c.id}">+</button>
+      </div>
+      ${cenarios.length > 2 ? `<button type="button" class="save-row btn-remover-cenario" data-cenario-remover="${c.id}">Remover cenário</button>` : ""}
+    </div>`
+    )
+    .join("");
+
+  cenarios.forEach((c) => {
+    container.querySelector(`[data-cenario-pills="${c.id}"]`).innerHTML = c.pares
+      .map(
+        (par, i) => `<span class="elenco-pill">${par.nome} (${PAPEIS[par.papel] || par.papel})<button type="button" data-cenario-remove-par="${c.id}:${i}">×</button></span>`
+      )
+      .join("");
+  });
+
+  container.querySelectorAll("[data-cenario-nome]").forEach((input) => {
+    input.addEventListener("input", () => {
+      const c = cenarios.find((x) => x.id === Number(input.dataset.cenarioNome));
+      c.nome = input.value;
+      compararCenarios();
+    });
+  });
+
+  container.querySelectorAll("[data-cenario-add]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = Number(btn.dataset.cenarioAdd);
+      const c = cenarios.find((x) => x.id === id);
+      const nome = container.querySelector(`[data-cenario-pessoa="${id}"]`).value;
+      const papel = container.querySelector(`[data-cenario-papel="${id}"]`).value;
+      if (!nome || !papel) return;
+      if (!c.pares.some((p) => p.nome === nome && p.papel === papel)) c.pares.push({ nome, papel });
+      renderCenarios();
+    });
+  });
+
+  container.querySelectorAll("[data-cenario-remove-par]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const [id, idx] = btn.dataset.cenarioRemovePar.split(":").map(Number);
+      cenarios.find((x) => x.id === id).pares.splice(idx, 1);
+      renderCenarios();
+    });
+  });
+
+  container.querySelectorAll("[data-cenario-remover]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cenarios = cenarios.filter((c) => c.id !== Number(btn.dataset.cenarioRemover));
+      renderCenarios();
+    });
+  });
+
+  compararCenarios();
+}
+
+function compararCenarios() {
+  const videos = dashFilteredVideos();
+  const resultados = cenarios.map((c) => ({ nome: c.nome, ...metricasDeVideos(videosDoCenario(videos, c.pares)) }));
+
+  el("comparadorCenariosHeader").innerHTML = "<th>Métrica</th>" + resultados.map((r) => `<th>${escapeAttr(r.nome)}</th>`).join("");
+
+  const base = resultados[0];
+  const linhasMetricas = [
+    { label: "Vídeos (escalações)", chave: "qtd", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Views (soma)", chave: "views", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Views (média)", chave: "mediaViews", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Curtidas (soma)", chave: "likes", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Comentários (soma)", chave: "comentarios", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Chat (soma)", chave: "chat", formato: (v) => v.toLocaleString("pt-BR") },
+    { label: "Engajamento", chave: "engajamento", formato: formatPct },
+  ];
+
+  const linhasHtml = linhasMetricas
+    .map((m) => {
+      const celulas = resultados
+        .map((r, i) => {
+          const valor = r[m.chave];
+          const diff = i === 0 || !base.qtd ? null : pctDiff(valor, base[m.chave]);
+          const diffHtml = diff == null ? "" : ` <span class="${diff >= 0 ? "diff-pos" : "diff-neg"}">(${formatPctDiff(diff)})</span>`;
+          return `<td>${m.formato(valor)}${diffHtml}</td>`;
+        })
+        .join("");
+      return `<tr><td>${m.label}</td>${celulas}</tr>`;
+    })
+    .join("");
+
+  const avisos = resultados
+    .map((r) => {
+      if (r.qtd === 0) return `${escapeAttr(r.nome)}: nenhum vídeo encontrado nesse recorte.`;
+      if (r.qtd < 5) return `${escapeAttr(r.nome)}: só ${r.qtd} vídeo(s), leia com cautela.`;
+      return null;
+    })
+    .filter(Boolean);
+  const avisoHtml = avisos.length
+    ? `<tr><td colspan="${resultados.length + 1}"><span class="amostra-aviso baixa">${avisos.join(" · ")}</span></td></tr>`
+    : "";
+
+  document.querySelector("#comparadorCenariosTable tbody").innerHTML = linhasHtml + avisoHtml;
+}
+
+el("btnAdicionarCenario").addEventListener("click", () => {
+  if (cenarios.length >= 4) {
+    alert("Máximo de 4 cenários por comparação.");
+    return;
+  }
+  cenarios.push({ id: proximoCenarioId++, nome: `Cenário ${String.fromCharCode(65 + cenarios.length)}`, pares: [] });
+  renderCenarios();
+});
+
+function populateParceiroMembroSelect() {
+  const select = el("parceiroFiltroMembro");
+  const prev = select.value;
+  select.innerHTML = '<option value="">(selecione)</option>' + pessoaOptionsHtml();
+  if (pessoasCache.some((p) => p.nome === prev)) select.value = prev;
+}
+
+function renderMelhorParceiro() {
+  const membro = el("parceiroFiltroMembro").value;
+  const tbody = document.querySelector("#melhorParceiroTable tbody");
+  if (!membro) {
+    tbody.innerHTML = `<tr><td colspan="4" class="hint">Selecione um membro.</td></tr>`;
+    return;
+  }
+
+  const videos = dashFilteredVideos().filter((v) => (v.participacoes || []).some((p) => p.nome === membro));
+  const porParceiro = {};
+  for (const v of videos) {
+    const parceiros = new Set((v.participacoes || []).map((p) => p.nome).filter((nome) => nome !== membro));
+    for (const parceiro of parceiros) {
+      if (!porParceiro[parceiro]) porParceiro[parceiro] = [];
+      porParceiro[parceiro].push(v);
+    }
+  }
+
+  const linhas = Object.entries(porParceiro)
+    .map(([parceiro, vids]) => ({ parceiro, ...metricasDeVideos(vids) }))
+    .sort((a, b) => b.mediaViews - a.mediaViews);
+
+  tbody.innerHTML = linhas.length
+    ? linhas
+        .map(
+          (l) => `<tr>
+        <td>${l.parceiro}</td><td>${l.qtd}${l.qtd < 5 ? ' <span class="amostra-aviso baixa">(amostra pequena)</span>' : ""}</td>
+        <td>${l.mediaViews.toLocaleString("pt-BR")}</td><td>${formatPct(l.engajamento)}</td>
+      </tr>`
+        )
+        .join("")
+    : `<tr><td colspan="4" class="hint">Esse membro não apareceu com outras pessoas nesse recorte.</td></tr>`;
+}
+
+function populatePapeisPorPessoaSelect() {
+  const select = el("papeisPorPessoaMembro");
+  const prev = select.value;
+  select.innerHTML = '<option value="">(selecione)</option>' + pessoaOptionsHtml();
+  if (pessoasCache.some((p) => p.nome === prev)) select.value = prev;
+}
+
+function renderPapeisPorPessoa() {
+  const membro = el("papeisPorPessoaMembro").value;
+  const tbody = document.querySelector("#papeisPorPessoaTable tbody");
+  if (!membro) {
+    tbody.innerHTML = `<tr><td colspan="4" class="hint">Selecione um membro.</td></tr>`;
+    return;
+  }
+
+  const videos = dashFilteredVideos();
+  const porPapel = {};
+  for (const v of videos) {
+    for (const p of v.participacoes || []) {
+      if (p.nome !== membro) continue;
+      if (!porPapel[p.papel]) porPapel[p.papel] = [];
+      porPapel[p.papel].push(v);
+    }
+  }
+
+  const linhas = Object.entries(porPapel)
+    .map(([papel, vids]) => ({ papel, ...metricasDeVideos(vids) }))
+    .sort((a, b) => b.mediaViews - a.mediaViews);
+
+  tbody.innerHTML = linhas.length
+    ? linhas
+        .map(
+          (l) => `<tr>
+        <td>${PAPEIS[l.papel] || l.papel}</td><td>${l.qtd}${l.qtd < 5 ? ' <span class="amostra-aviso baixa">(amostra pequena)</span>' : ""}</td>
+        <td>${l.mediaViews.toLocaleString("pt-BR")}</td><td>${formatPct(l.engajamento)}</td>
+      </tr>`
+        )
+        .join("")
+    : `<tr><td colspan="4" class="hint">Esse membro não tem participações nesse recorte.</td></tr>`;
+}
+
+el("parceiroFiltroMembro").addEventListener("change", renderMelhorParceiro);
+el("papeisPorPessoaMembro").addEventListener("change", renderPapeisPorPessoa);
 
 carregarPessoas();
 carregarCompeticoes();
