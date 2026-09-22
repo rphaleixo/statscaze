@@ -62,12 +62,15 @@ function papeisMarcados(container, idPrefix) {
   return Array.from(container.querySelectorAll(`[data-papel-checkbox="${idPrefix}"]:checked`)).map((cb) => cb.value);
 }
 
-// ---------- progresso / log ----------
+// ---------- progresso / log / interrupção ----------
 
 const progressBar = el("progressBar");
 const progressFill = progressBar.querySelector(".progress-fill");
 const progressText = el("progressText");
 const logArea = el("logArea");
+const btnParar = el("btnPararExecucao");
+
+let execucaoCancelada = false;
 
 function resetExecucao() {
   progressBar.classList.add("active");
@@ -75,6 +78,23 @@ function resetExecucao() {
   progressText.textContent = "";
   logArea.classList.add("active");
   logArea.textContent = "";
+  execucaoCancelada = false;
+  btnParar.classList.add("active");
+}
+
+function encerrarExecucao() {
+  btnParar.classList.remove("active");
+}
+
+btnParar.addEventListener("click", () => {
+  execucaoCancelada = true;
+  log("Pedido de interrupção recebido — parando após o lote atual...");
+});
+
+// Chame no início de cada iteração de lote nos loops de mapeamento,
+// transcrição e sugestão da IA. Retorna true se a execução deve parar.
+function foiInterrompido() {
+  return execucaoCancelada;
 }
 
 function setProgress(index, total, label) {
@@ -129,7 +149,10 @@ el("btnMapear").addEventListener("click", async () => {
     log(`Listando vídeos publicados entre ${dateFrom} e ${dateTo}...`);
     const allIds = [];
     let pageToken;
+    let interrompidoNaBusca = false;
     do {
+      if (foiInterrompido()) { interrompidoNaBusca = true; break; }
+
       const params = new URLSearchParams({
         channelId: channelRes.channelId,
         publishedAfter: `${dateFrom}T00:00:00Z`,
@@ -148,7 +171,10 @@ el("btnMapear").addEventListener("click", async () => {
     log(`${allIds.length} vídeo(s) encontrado(s) no período (todos os tipos).`);
 
     let saved = 0;
+    let interrompido = interrompidoNaBusca;
     for (let i = 0; i < allIds.length; i += 50) {
+      if (foiInterrompido()) { interrompido = true; break; }
+
       const batch = allIds.slice(i, i + 50);
       setProgress(i, allIds.length, "Mapeamento");
 
@@ -167,13 +193,18 @@ el("btnMapear").addEventListener("click", async () => {
       }
     }
 
-    setProgress(allIds.length, allIds.length, "Mapeamento");
-    statusMsg(`Mapeamento concluído: ${saved} vídeo(s). Vídeos já existentes só tiveram views/comentários/chat atualizados.`, "success");
+    setProgress(saved, allIds.length, "Mapeamento");
+    if (interrompido) {
+      statusMsg(`Mapeamento interrompido: ${saved} vídeo(s) salvos antes de parar.`, "error");
+    } else {
+      statusMsg(`Mapeamento concluído: ${saved} vídeo(s). Vídeos já existentes só tiveram views/comentários/chat atualizados.`, "success");
+    }
     await carregarVideos();
   } catch (error) {
     statusMsg(`Erro durante o mapeamento: ${error.message}`, "error");
   } finally {
     el("btnMapear").disabled = false;
+    encerrarExecucao();
   }
 });
 
@@ -208,8 +239,11 @@ el("btnTranscrever").addEventListener("click", async () => {
 
     log(`${videoIds.length} vídeo(s) para buscar transcrição.`);
     let processed = 0;
+    let interrompido = false;
 
     for (let i = 0; i < videoIds.length; i += 5) {
+      if (foiInterrompido()) { interrompido = true; break; }
+
       const batch = videoIds.slice(i, i + 5);
       setProgress(processed, videoIds.length, "Transcrição");
 
@@ -227,13 +261,18 @@ el("btnTranscrever").addEventListener("click", async () => {
       }
     }
 
-    setProgress(videoIds.length, videoIds.length, "Transcrição");
-    statusMsg(`Transcrição concluída: ${processed} vídeo(s) processados.`, "success");
+    setProgress(processed, videoIds.length, "Transcrição");
+    if (interrompido) {
+      statusMsg(`Transcrição interrompida: ${processed} de ${videoIds.length} vídeo(s) processados antes de parar.`, "error");
+    } else {
+      statusMsg(`Transcrição concluída: ${processed} vídeo(s) processados.`, "success");
+    }
     await carregarVideos();
   } catch (error) {
     statusMsg(`Erro durante a transcrição: ${error.message}`, "error");
   } finally {
     el("btnTranscrever").disabled = false;
+    encerrarExecucao();
   }
 });
 
@@ -261,8 +300,11 @@ el("btnSugerirIA").addEventListener("click", async () => {
   try {
     log(`${videoIds.length} vídeo(s) sem classificação. Pedindo sugestão à IA...`);
     let processed = 0;
+    let interrompido = false;
 
     for (let i = 0; i < videoIds.length; i += 5) {
+      if (foiInterrompido()) { interrompido = true; break; }
+
       const batch = videoIds.slice(i, i + 5);
       setProgress(processed, videoIds.length, "Sugestão IA");
 
@@ -294,13 +336,18 @@ el("btnSugerirIA").addEventListener("click", async () => {
       }
     }
 
-    setProgress(videoIds.length, videoIds.length, "Sugestão IA");
-    statusMsg(`Sugestões geradas para ${processed} vídeo(s). Revise na aba Vídeos.`, "success");
+    setProgress(processed, videoIds.length, "Sugestão IA");
+    if (interrompido) {
+      statusMsg(`Sugestão interrompida: ${processed} de ${videoIds.length} vídeo(s) processados antes de parar.`, "error");
+    } else {
+      statusMsg(`Sugestões geradas para ${processed} vídeo(s). Revise na aba Vídeos.`, "success");
+    }
     await carregarVideos();
   } catch (error) {
     statusMsg(`Erro ao pedir sugestões à IA: ${error.message}`, "error");
   } finally {
     el("btnSugerirIA").disabled = false;
+    encerrarExecucao();
   }
 });
 

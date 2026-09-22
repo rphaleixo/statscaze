@@ -75,7 +75,11 @@ button:disabled { opacity: .5; cursor: not-allowed; }
 .progress-bar { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; display: none; }
 .progress-bar.active { display: block; }
 .progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width .2s; }
-.progress-text { font-size: 13px; color: var(--text-muted); margin: 6px 0; }
+.progress-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.progress-text { font-size: 13px; color: var(--text-muted); margin: 6px 0; flex: 1; }
+button.danger { background: var(--danger); color: #2a0000; font-weight: 600; }
+#btnPararExecucao { width: auto; padding: 6px 14px; font-size: 12px; display: none; flex-shrink: 0; }
+#btnPararExecucao.active { display: inline-block; }
 .log-area {
   max-height: 160px;
   overflow-y: auto;
