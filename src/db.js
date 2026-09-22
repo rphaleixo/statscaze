@@ -11,8 +11,8 @@ export async function upsertVideoMetadata(db, row) {
       `INSERT INTO videos (
         video_id, canal, tipo_video, titulo, descricao,
         data_publicacao, duracao_segundos, views, comentarios,
-        mensagens_chat, url, coletado_em
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        mensagens_chat, url, thumbnail_url, coletado_em
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(video_id) DO UPDATE SET
         views=excluded.views,
         comentarios=excluded.comentarios,
@@ -31,6 +31,7 @@ export async function upsertVideoMetadata(db, row) {
       row.comentarios,
       row.mensagens_chat,
       row.url,
+      row.thumbnail_url || null,
       row.coletado_em
     )
     .run();
@@ -61,22 +62,6 @@ export const PAPEIS = {
   comentarista: "Comentarista",
   reporter: "Repórter",
   apresentador: "Apresentador",
-};
-
-// Classificação editorial do vídeo (diferente do tipo técnico
-// live/short/video). Cada uma libera um conjunto diferente de papéis:
-// uma transmissão tem narrador/comentaristas/repórter; um programa tem
-// apresentador(es); um especial não tem restrição.
-export const TIPOS_CONTEUDO = {
-  transmissao: "Transmissão",
-  programa: "Programa",
-  especial: "Especial",
-};
-
-export const PAPEIS_POR_TIPO_CONTEUDO = {
-  transmissao: ["narrador", "comentarista", "reporter"],
-  programa: ["apresentador"],
-  especial: Object.keys(PAPEIS),
 };
 
 // Atualiza só os campos presentes no objeto (chave existe, mesmo que valor
@@ -200,6 +185,39 @@ export async function updateCompeticaoCadastrada(db, id, nome) {
 
 export async function deleteCompeticaoCadastrada(db, id) {
   await db.prepare(`DELETE FROM competicoes WHERE id = ?`).bind(id).run();
+}
+
+// ---------- tipos de conteúdo (lista editável, com arquivamento) ----------
+
+function parseTipoConteudoRow(row) {
+  return { ...row, papeis_permitidos: row.papeis_permitidos ? parseJsonArray(row.papeis_permitidos) : null };
+}
+
+// incluirArquivados=false (padrão) é o que deve alimentar o menu da aba
+// Vídeos — uma opção arquivada nunca aparece lá, mas continua existindo
+// para os vídeos que já foram classificados com ela.
+export async function listTiposConteudo(db, { incluirArquivados = true } = {}) {
+  const where = incluirArquivados ? "" : "WHERE arquivado = 0";
+  const result = await db.prepare(`SELECT * FROM tipos_conteudo ${where} ORDER BY nome`).all();
+  return result.results.map(parseTipoConteudoRow);
+}
+
+export async function createTipoConteudo(db, nome, papeisPermitidos) {
+  const result = await db
+    .prepare(`INSERT INTO tipos_conteudo (nome, papeis_permitidos, arquivado, criado_em) VALUES (?, ?, 0, ?) ON CONFLICT(nome) DO NOTHING`)
+    .bind(nome.trim(), papeisPermitidos?.length ? JSON.stringify(papeisPermitidos) : null, new Date().toISOString())
+    .run();
+  return result.meta.last_row_id;
+}
+
+export async function arquivarTipoConteudo(db, id, arquivado) {
+  await db.prepare(`UPDATE tipos_conteudo SET arquivado = ? WHERE id = ?`).bind(arquivado ? 1 : 0, id).run();
+}
+
+export async function getPapeisPermitidosPorTipoConteudo(db, nomeTipoConteudo) {
+  if (!nomeTipoConteudo) return null;
+  const row = await db.prepare(`SELECT papeis_permitidos FROM tipos_conteudo WHERE nome = ?`).bind(nomeTipoConteudo).first();
+  return row?.papeis_permitidos ? parseJsonArray(row.papeis_permitidos) : null;
 }
 
 // ---------- participações (elenco por vídeo) ----------

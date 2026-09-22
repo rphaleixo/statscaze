@@ -28,6 +28,7 @@
         <button class="tab-btn" data-tab="videos">Vídeos</button>
         <button class="tab-btn" data-tab="elenco">Elenco</button>
         <button class="tab-btn" data-tab="competicoes">Competições</button>
+        <button class="tab-btn" data-tab="tipos-conteudo">Tipo de Conteúdo</button>
         <button class="tab-btn" data-tab="dashboards">Dashboards</button>
       </nav>
 
@@ -101,7 +102,7 @@
           <div class="csv-import-body">
             <p class="hint">
               Formato: uma linha por pessoa. Colunas: <code>video_id</code>, <code>tipo_conteudo</code>
-              (transmissao/programa/especial, opcional), <code>competicao</code> (opcional),
+              (nome cadastrado na aba "Tipo de Conteúdo", opcional), <code>competicao</code> (opcional),
               <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (narrador,
               comentarista, reporter ou apresentador). Repita o <code>video_id</code> em uma linha
               para cada pessoa do vídeo.
@@ -116,7 +117,7 @@
           <table id="videosTable">
             <thead>
               <tr>
-                <th>ID (YouTube)</th><th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
+                <th>Thumb</th><th>ID (YouTube)</th><th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
                 <th>Views</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
                 <th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
                 <th>Elenco do vídeo</th><th></th>
@@ -165,6 +166,27 @@
         <div class="table-wrap">
           <table id="competicoesTable">
             <thead><tr><th>Nome</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-tipos-conteudo" class="tab-panel">
+        <p class="hint">
+          Lista de tipos de conteúdo (editorial) usada na classificação dos vídeos na aba "Vídeos"
+          e nas sugestões da IA. Uma opção arquivada some da lista de novas classificações, mas
+          continua valendo para os vídeos que já foram classificados com ela.
+        </p>
+
+        <div class="pessoa-form">
+          <input id="novoTipoConteudoNome" type="text" placeholder="Nome do tipo de conteúdo" />
+          <div class="papeis-checkboxes" id="novoTipoConteudoPapeis"></div>
+          <button id="btnAdicionarTipoConteudo" class="primary">Adicionar</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="tiposConteudoTable">
+            <thead><tr><th>Nome</th><th>Papéis permitidos</th><th>Status</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>

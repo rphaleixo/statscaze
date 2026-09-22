@@ -102,6 +102,9 @@ export async function getVideoDetails(videoIds, channelHandle, apiKey) {
 
     const publishedAt = liveDetails.actualStartTime || snippet.publishedAt;
     const tipoVideo = classifyContentType(snippet, contentDetails, liveDetails);
+    const thumbnails = snippet.thumbnails || {};
+    const thumbnailUrl =
+      thumbnails.medium?.url || thumbnails.high?.url || thumbnails.default?.url || null;
 
     return {
       video_id: item.id,
@@ -114,6 +117,7 @@ export async function getVideoDetails(videoIds, channelHandle, apiKey) {
       views: parseInt(statistics.viewCount || "0", 10),
       comentarios: statistics.commentCount != null ? parseInt(statistics.commentCount, 10) : null,
       url: `https://www.youtube.com/watch?v=${item.id}`,
+      thumbnail_url: thumbnailUrl,
       _live_chat_id: liveDetails.activeLiveChatId || null,
     };
   });

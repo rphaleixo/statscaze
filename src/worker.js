@@ -14,8 +14,6 @@ import {
   getVideoIdsPendingTranscript,
   getVideoTitlesUrls,
   PAPEIS,
-  TIPOS_CONTEUDO,
-  PAPEIS_POR_TIPO_CONTEUDO,
   listPessoas,
   upsertPessoa,
   updatePessoa,
@@ -29,6 +27,10 @@ import {
   createCompeticaoCadastrada,
   updateCompeticaoCadastrada,
   deleteCompeticaoCadastrada,
+  listTiposConteudo,
+  createTipoConteudo,
+  arquivarTipoConteudo,
+  getPapeisPermitidosPorTipoConteudo,
 } from "./db.js";
 import { sugerirClassificacao } from "./ai.js";
 
@@ -109,10 +111,11 @@ async function handleDetails(request, env) {
       comentarios: video.comentarios,
       mensagens_chat: mensagensChat,
       url: video.url,
+      thumbnail_url: video.thumbnail_url,
       coletado_em: new Date().toISOString(),
     };
 
-    await upsertVideoMetadata(env.DB, row);
+  await upsertVideoMetadata(env.DB, row);
     saved.push({ video_id: video.video_id, titulo: video.titulo, tipo_video: video.tipo_video, chat_error: chatError });
   }
 
@@ -174,7 +177,7 @@ async function handleExportCsv(url, env) {
   const columns = [
     "video_id", "canal", "tipo_video", "tipo_conteudo", "titulo", "data_publicacao",
     "duracao_segundos", "views", "comentarios", "mensagens_chat",
-    "competicao", "programa", "elenco", "transcricao_sucesso", "url",
+    "competicao", "programa", "elenco", "transcricao_sucesso", "url", "thumbnail_url",
   ];
 
   const lines = [columns.join(",")];
@@ -197,11 +200,11 @@ async function handleExportCsv(url, env) {
 }
 
 // Filtra participações para só manter papéis compatíveis com o tipo de
-// conteúdo do vídeo (transmissão -> narrador/comentarista/repórter;
-// programa -> apresentador; especial -> qualquer um). Sem tipo de conteúdo
-// definido, não restringe.
-function filtrarPapeisPermitidos(participacoes, tipoConteudo) {
-  const permitidos = tipoConteudo ? PAPEIS_POR_TIPO_CONTEUDO[tipoConteudo] : null;
+// conteúdo do vídeo, segundo o cadastro em tipos_conteudo (papeis_permitidos).
+// Sem restrição cadastrada para o tipo (ou sem tipo de conteúdo definido),
+// não filtra nada.
+async function filtrarPapeisPermitidos(env, participacoes, tipoConteudo) {
+  const permitidos = await getPapeisPermitidosPorTipoConteudo(env.DB, tipoConteudo);
   if (!permitidos) return participacoes;
   return participacoes.filter((p) => permitidos.includes(p.papel));
 }
@@ -215,15 +218,15 @@ async function handleEnrich(request, env) {
 
   await updateClassificacao(env.DB, videoId, { competicao, programa, tipoConteudo });
   if (Array.isArray(participacoes)) {
-    await setParticipacoes(env.DB, videoId, filtrarPapeisPermitidos(participacoes, tipoConteudo));
+    await setParticipacoes(env.DB, videoId, await filtrarPapeisPermitidos(env, participacoes, tipoConteudo));
   }
 
   return json({ ok: true });
 }
 
 // Importação em lote por CSV, no formato "uma linha por pessoa": colunas
-// video_id, tipo_conteudo (transmissao/programa/especial, opcional),
-// competicao (opcional), programa (opcional), nome, papel
+// video_id, tipo_conteudo (nome cadastrado na aba Tipo de Conteúdo,
+// opcional), competicao (opcional), programa (opcional), nome, papel
 // (narrador/comentarista/reporter/apresentador). Repita
 // tipo_conteudo/competicao/programa em cada linha do mesmo vídeo, ou deixe
 // só na primeira.
@@ -272,7 +275,8 @@ async function handleEnrichImport(request, env) {
   }
 
   const papeisValidos = new Set(Object.keys(PAPEIS));
-  const tiposConteudoValidos = new Set(Object.keys(TIPOS_CONTEUDO));
+  const tiposConteudo = await listTiposConteudo(env.DB, { incluirArquivados: true });
+  const nomePorTipoConteudoLower = new Map(tiposConteudo.map((t) => [t.nome.toLowerCase(), t.nome]));
 
   // Agrupa as linhas por vídeo: cada vídeo pode ter várias linhas (uma por pessoa).
   const porVideo = new Map();
@@ -286,8 +290,8 @@ async function handleEnrichImport(request, env) {
     if (row.competicao?.trim()) entry.competicao = row.competicao.trim();
     if (row.programa?.trim()) entry.programa = row.programa.trim();
 
-    const tipoConteudo = row.tipo_conteudo?.trim().toLowerCase();
-    if (tipoConteudo && tiposConteudoValidos.has(tipoConteudo)) entry.tipoConteudo = tipoConteudo;
+    const tipoConteudoNome = nomePorTipoConteudoLower.get(row.tipo_conteudo?.trim().toLowerCase());
+    if (tipoConteudoNome) entry.tipoConteudo = tipoConteudoNome;
 
     if (row.nome?.trim()) {
       const papel = (row.papel || "comentarista").trim().toLowerCase();
@@ -310,7 +314,7 @@ async function handleEnrichImport(request, env) {
     }
     if (entry.participacoes.length) {
       const tipoConteudoEfetivo = entry.tipoConteudo || existing.tipo_conteudo;
-      await setParticipacoes(env.DB, videoId, filtrarPapeisPermitidos(entry.participacoes, tipoConteudoEfetivo));
+      await setParticipacoes(env.DB, videoId, await filtrarPapeisPermitidos(env, entry.participacoes, tipoConteudoEfetivo));
     }
     atualizados++;
   }
@@ -385,6 +389,31 @@ async function handleDeleteCompeticao(request, env) {
   return json({ ok: true });
 }
 
+// ---------- tipos de conteúdo (lista editável, com arquivamento) ----------
+
+async function handleListTiposConteudo(env) {
+  const tipos = await listTiposConteudo(env.DB, { incluirArquivados: true });
+  return json({ tipos, papeis: PAPEIS });
+}
+
+// body: { nome, papeis_permitidos: ["comentarista", ...] ou [] para "qualquer papel" }
+async function handleCreateTipoConteudo(request, env) {
+  const body = await request.json();
+  if (!body.nome?.trim()) return json({ error: "nome é obrigatório." }, 400);
+
+  const id = await createTipoConteudo(env.DB, body.nome, body.papeis_permitidos);
+  return json({ id });
+}
+
+// body: { id, arquivado: true|false }
+async function handleArquivarTipoConteudo(request, env) {
+  const body = await request.json();
+  if (!body.id) return json({ error: "id é obrigatório." }, 400);
+
+  await arquivarTipoConteudo(env.DB, body.id, body.arquivado);
+  return json({ ok: true });
+}
+
 // ---------- sugestão de classificação (tipo de conteúdo/competição/programa/elenco) via IA ----------
 
 async function handleAiSugerir(request, env) {
@@ -397,6 +426,8 @@ async function handleAiSugerir(request, env) {
   const competicoesConhecidas = await getCompeticoesConhecidas(env.DB);
   const programasConhecidas = await getProgramasConhecidos(env.DB);
   const pessoasConhecidas = await listPessoas(env.DB);
+  const tiposConteudoConhecidos = (await listTiposConteudo(env.DB, { incluirArquivados: false }))
+    .map((t) => ({ nome: t.nome, papeisPermitidos: t.papeis_permitidos }));
   const titles = await getVideoTitlesUrls(env.DB, videoIds);
   const rows = await env.DB
     .prepare(`SELECT video_id, titulo, descricao, transcricao_completa FROM videos WHERE video_id IN (${videoIds.map(() => "?").join(",")})`)
@@ -413,6 +444,7 @@ async function handleAiSugerir(request, env) {
       competicoesConhecidas,
       programasConhecidas,
       pessoasConhecidas,
+      tiposConteudoConhecidos,
     });
 
     if (tipoConteudo || competicao || programa) {
@@ -481,6 +513,7 @@ async function autoCollect(env, days = 2) {
         comentarios: video.comentarios,
         mensagens_chat: mensagensChat,
         url: video.url,
+        thumbnail_url: video.thumbnail_url,
         coletado_em: new Date().toISOString(),
       });
     }
@@ -542,6 +575,15 @@ export default {
       }
       if (url.pathname === "/api/competicoes/delete" && request.method === "POST") {
         return await handleDeleteCompeticao(request, env);
+      }
+      if (url.pathname === "/api/tipos-conteudo" && request.method === "GET") {
+        return await handleListTiposConteudo(env);
+      }
+      if (url.pathname === "/api/tipos-conteudo" && request.method === "POST") {
+        return await handleCreateTipoConteudo(request, env);
+      }
+      if (url.pathname === "/api/tipos-conteudo/arquivar" && request.method === "POST") {
+        return await handleArquivarTipoConteudo(request, env);
       }
       if (url.pathname === "/api/ai/sugerir" && request.method === "POST") {
         return await handleAiSugerir(request, env);

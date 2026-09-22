@@ -1,11 +1,5 @@
 const CONTENT_TYPE_LABELS = { live: "Live", short: "Short", video: "Vídeo normal" };
 const PAPEIS = { narrador: "Narrador", comentarista: "Comentarista", reporter: "Repórter", apresentador: "Apresentador" };
-const TIPOS_CONTEUDO = { transmissao: "Transmissão", programa: "Programa", especial: "Especial" };
-const PAPEIS_POR_TIPO_CONTEUDO = {
-  transmissao: ["narrador", "comentarista", "reporter"],
-  programa: ["apresentador"],
-  especial: Object.keys(PAPEIS),
-};
 
 const el = (id) => document.getElementById(id);
 const escapeAttr = (s) => (s || "").replace(/"/g, "&quot;");
@@ -42,10 +36,16 @@ function papelOptionsHtml(selected, papeisPermitidos) {
 }
 
 function tipoConteudoOptionsHtml(selected) {
+  const visiveis = tiposConteudoCache.filter((t) => !t.arquivado || t.nome === selected);
   return '<option value="">(não classificado)</option>' +
-    Object.entries(TIPOS_CONTEUDO)
-      .map(([valor, label]) => `<option value="${valor}"${valor === selected ? " selected" : ""}>${label}</option>`)
+    visiveis
+      .map((t) => `<option value="${escapeAttr(t.nome)}"${t.nome === selected ? " selected" : ""}>${t.nome}${t.arquivado ? " (arquivado)" : ""}</option>`)
       .join("");
+}
+
+function papeisPermitidosPorTipoConteudo(nomeTipoConteudo) {
+  const tipo = tiposConteudoCache.find((t) => t.nome === nomeTipoConteudo);
+  return tipo?.papeis_permitidos?.length ? tipo.papeis_permitidos : Object.keys(PAPEIS);
 }
 
 function papeisCheckboxesHtml(idPrefix, selecionados) {
@@ -324,7 +324,7 @@ el("btnSugerirIA").addEventListener("click", async () => {
         }
 
         const partes = [];
-        if (item.tipo_conteudo_sugerido) partes.push(TIPOS_CONTEUDO[item.tipo_conteudo_sugerido] || item.tipo_conteudo_sugerido);
+        if (item.tipo_conteudo_sugerido) partes.push(item.tipo_conteudo_sugerido);
         if (item.competicao_sugerida) partes.push(`competição: ${item.competicao_sugerida}`);
         if (item.programa_sugerido) partes.push(`programa: ${item.programa_sugerido}`);
         if (item.participantes_sugeridos?.length) partes.push(`elenco: ${item.participantes_sugeridos.map((p) => p.nome).join(", ")}`);
@@ -356,6 +356,7 @@ el("btnSugerirIA").addEventListener("click", async () => {
 let videosCache = [];
 let pessoasCache = [];
 let competicoesCache = [];
+let tiposConteudoCache = [];
 
 async function carregarVideos() {
   const dateFrom = el("dateFrom").value;
@@ -383,6 +384,13 @@ async function carregarCompeticoes() {
   competicoesCache = res.competicoes || [];
   renderCompeticoesTable();
   renderCompeticoesDatalist();
+}
+
+async function carregarTiposConteudo() {
+  const res = await fetch("/api/tipos-conteudo").then((r) => r.json());
+  tiposConteudoCache = res.tipos || [];
+  renderTiposConteudoTable();
+  renderVideosTable();
 }
 
 function getOrCreateDatalist(id) {
@@ -431,7 +439,7 @@ function criarLinhaVideo(v) {
     (v.programa_sugerido && v.programa_sugerido !== v.programa);
 
   const partesSugestao = [];
-  if (v.tipo_conteudo_sugerido) partesSugestao.push(TIPOS_CONTEUDO[v.tipo_conteudo_sugerido] || v.tipo_conteudo_sugerido);
+  if (v.tipo_conteudo_sugerido) partesSugestao.push(v.tipo_conteudo_sugerido);
   if (v.competicao_sugerida) partesSugestao.push(`competição: ${v.competicao_sugerida}`);
   if (v.programa_sugerido) partesSugestao.push(`programa: ${v.programa_sugerido}`);
 
@@ -446,6 +454,7 @@ function criarLinhaVideo(v) {
     .filter((sug) => !participacoesLocal.some((p) => p.nome === sug.nome && p.papel === sug.papel));
 
   tr.innerHTML = `
+    <td>${v.thumbnail_url ? `<img class="video-thumb" src="${escapeAttr(v.thumbnail_url)}" alt="" loading="lazy" />` : ""}</td>
     <td><code>${v.video_id}</code></td>
     <td>${CONTENT_TYPE_LABELS[v.tipo_video] || v.tipo_video || ""}</td>
     <td class="wrap">${v.titulo || ""}</td>
@@ -482,7 +491,7 @@ function criarLinhaVideo(v) {
   const novoPapelSelect = tr.querySelector('[data-field="novoPapel"]');
 
   function papeisPermitidosAtual() {
-    return PAPEIS_POR_TIPO_CONTEUDO[tipoConteudoSelect.value] || Object.keys(PAPEIS);
+    return papeisPermitidosPorTipoConteudo(tipoConteudoSelect.value);
   }
 
   function atualizarPapeisDisponiveis() {
@@ -798,6 +807,52 @@ el("btnAdicionarCompeticao").addEventListener("click", async () => {
   await carregarCompeticoes();
 });
 
+// ---------- aba Tipo de Conteúdo ----------
+
+function renderTiposConteudoTable() {
+  const tbody = document.querySelector("#tiposConteudoTable tbody");
+  tbody.innerHTML = tiposConteudoCache
+    .map(
+      (t) => `
+      <tr>
+        <td>${t.nome}</td>
+        <td>${(t.papeis_permitidos?.length ? t.papeis_permitidos.map((p) => PAPEIS[p] || p) : ["(qualquer papel)"]).join(", ")}</td>
+        <td>${t.arquivado ? "Arquivado" : "Ativo"}</td>
+        <td><button class="save-row" data-arquivar-tipo="${t.id}" data-arquivado="${t.arquivado ? 0 : 1}">${t.arquivado ? "Restaurar" : "Arquivar"}</button></td>
+      </tr>`
+    )
+    .join("");
+
+  tbody.querySelectorAll("[data-arquivar-tipo]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      await fetch("/api/tipos-conteudo/arquivar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: Number(btn.dataset.arquivarTipo), arquivado: Number(btn.dataset.arquivado) === 1 }),
+      });
+      await carregarTiposConteudo();
+    });
+  });
+}
+
+el("novoTipoConteudoPapeis").innerHTML = papeisCheckboxesHtml("novo-tipo-conteudo", []);
+
+el("btnAdicionarTipoConteudo").addEventListener("click", async () => {
+  const nome = el("novoTipoConteudoNome").value.trim();
+  const papeis = papeisMarcados(document, "novo-tipo-conteudo");
+  if (!nome) return;
+
+  await fetch("/api/tipos-conteudo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nome, papeis_permitidos: papeis }),
+  });
+
+  el("novoTipoConteudoNome").value = "";
+  document.querySelectorAll('[data-papel-checkbox="novo-tipo-conteudo"]').forEach((cb) => { cb.checked = false; });
+  await carregarTiposConteudo();
+});
+
 // ---------- importar CSV (classificação + elenco por vídeo) ----------
 
 el("btnImportarCsv").addEventListener("click", async () => {
@@ -1005,4 +1060,4 @@ function renderCastDashboard() {
 
 carregarPessoas();
 carregarCompeticoes();
-carregarVideos();
+carregarTiposConteudo().then(carregarVideos);

@@ -111,6 +111,8 @@ th { color: var(--text-muted); font-weight: 600; background: var(--panel); posit
 td.wrap { white-space: normal; max-width: 320px; }
 tr:hover td { background: rgba(255,255,255,0.02); }
 
+.video-thumb { width: 100px; height: 56px; object-fit: cover; border-radius: 4px; display: block; }
+
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
 .metric-card .value { font-size: 24px; font-weight: 700; }
