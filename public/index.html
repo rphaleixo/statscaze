@@ -26,6 +26,7 @@
       <nav class="tabs">
         <button class="tab-btn active" data-tab="mapeamento">Mapeamento</button>
         <button class="tab-btn" data-tab="videos">Vídeos</button>
+        <button class="tab-btn" data-tab="aprovacao-ia">Aprovação IA</button>
         <button class="tab-btn" data-tab="elenco">Elenco</button>
         <button class="tab-btn" data-tab="competicoes">Competições</button>
         <button class="tab-btn" data-tab="tipos-conteudo">Tipo de Conteúdo</button>
@@ -120,8 +121,29 @@
                 <th>Thumb</th><th>ID (YouTube)</th><th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
                 <th>Views</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
                 <th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
-                <th>Elenco do vídeo</th><th>Ações</th>
+                <th>Elenco do vídeo</th><th>Avaliação IA</th><th>Ações</th>
               </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-aprovacao-ia" class="tab-panel">
+        <div class="panel-header">
+          <h3 id="aprovacaoIACount">0 vídeo(s) pendente(s)</h3>
+        </div>
+
+        <p class="hint">
+          Vídeos com sugestão da IA (classificação e/ou elenco) ainda não aprovada. Aprovar aplica
+          a sugestão como dado oficial do vídeo; descartar remove a sugestão sem alterar o que já
+          estava salvo.
+        </p>
+
+        <div class="table-wrap">
+          <table id="aprovacaoIATable">
+            <thead>
+              <tr><th>Thumb</th><th>Título</th><th>Sugestão da IA</th><th>Confiança</th><th></th></tr>
             </thead>
             <tbody></tbody>
           </table>

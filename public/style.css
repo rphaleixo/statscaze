@@ -113,6 +113,11 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 
 .video-thumb { width: 100px; height: 56px; object-fit: cover; border-radius: 4px; display: block; }
 
+#videosTable, #aprovacaoIATable { width: max-content; min-width: 100%; }
+.avaliacao-ia-cell { max-width: 260px; white-space: normal; }
+.avaliacao-ia-cell .sugestao-ia { margin-bottom: 4px; }
+.avaliacao-ia-cell .acoes-ia { display: flex; gap: 6px; }
+
 .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
 .metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
 .metric-card .value { font-size: 24px; font-weight: 700; }

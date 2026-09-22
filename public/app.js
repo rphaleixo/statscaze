@@ -351,6 +351,7 @@ async function carregarVideos() {
   renderVideosTable();
   renderDashboards();
   renderPessoasStats();
+  renderAprovacaoIA();
 }
 
 async function carregarPessoas() {
@@ -415,26 +416,6 @@ function criarLinhaVideo(v) {
   const tr = document.createElement("tr");
   let participacoesLocal = (v.participacoes || []).map((p) => ({ ...p }));
 
-  const temSugestaoClassificacao =
-    (v.tipo_conteudo_sugerido && v.tipo_conteudo_sugerido !== v.tipo_conteudo) ||
-    (v.competicao_sugerida && v.competicao_sugerida !== v.competicao) ||
-    (v.programa_sugerido && v.programa_sugerido !== v.programa);
-
-  const partesSugestao = [];
-  if (v.tipo_conteudo_sugerido) partesSugestao.push(v.tipo_conteudo_sugerido);
-  if (v.competicao_sugerida) partesSugestao.push(`competição: ${v.competicao_sugerida}`);
-  if (v.programa_sugerido) partesSugestao.push(`programa: ${v.programa_sugerido}`);
-
-  const sugestaoClassificacaoHtml = temSugestaoClassificacao
-    ? `<div class="sugestao-ia">
-        Sugestão IA: ${partesSugestao.join(" | ")} (${Math.round((v.competicao_confianca || 0) * 100)}%)
-        <button class="usar-sugestao" type="button">Usar</button>
-      </div>`
-    : "";
-
-  const participantesSugeridos = (sugestoesParticipantesPorVideo[v.video_id] || [])
-    .filter((sug) => !participacoesLocal.some((p) => p.nome === sug.nome && p.papel === sug.papel));
-
   tr.innerHTML = `
     <td>${v.thumbnail_url ? `<img class="video-thumb" src="${escapeAttr(v.thumbnail_url)}" alt="" loading="lazy" />` : ""}</td>
     <td><code>${v.video_id}</code></td>
@@ -449,19 +430,18 @@ function criarLinhaVideo(v) {
     <td><a href="${v.url}" target="_blank" rel="noopener">abrir</a></td>
     <td>
       <select data-field="tipoConteudo">${tipoConteudoOptionsHtml(v.tipo_conteudo)}</select>
-      ${sugestaoClassificacaoHtml}
     </td>
     <td><input type="text" list="competicoesDatalist" value="${escapeAttr(v.competicao)}" data-field="competicao" /></td>
     <td><input type="text" value="${escapeAttr(v.programa)}" data-field="programa" /></td>
     <td class="elenco-video-cell">
       <div class="elenco-pills"></div>
-      <div class="elenco-sugestoes"></div>
       <div class="elenco-add-form">
         <input type="text" list="pessoasDatalist" placeholder="Nome" data-field="novoNome" />
         <select data-field="novoPapel"></select>
         <button type="button" class="add-participante">+</button>
       </div>
     </td>
+    <td class="avaliacao-ia-cell"></td>
     <td class="acoes-video-cell">
       <button class="save-row buscar-transcricao-row" type="button">Transcrição</button>
       <button class="save-row sugerir-elenco-row" type="button">Sugerir elenco (IA)</button>
@@ -470,7 +450,7 @@ function criarLinhaVideo(v) {
   `;
 
   const pillsEl = tr.querySelector(".elenco-pills");
-  const sugestoesEl = tr.querySelector(".elenco-sugestoes");
+  const avaliacaoIaCell = tr.querySelector(".avaliacao-ia-cell");
   const tipoConteudoSelect = tr.querySelector('[data-field="tipoConteudo"]');
   const competicaoInput = tr.querySelector('[data-field="competicao"]');
   const programaInput = tr.querySelector('[data-field="programa"]');
@@ -478,27 +458,7 @@ function criarLinhaVideo(v) {
   const transcricaoCell = tr.querySelector(".transcricao-cell");
 
   novoPapelSelect.innerHTML = papelOptionsHtml();
-
-  function renderSugestoesParticipantes() {
-    sugestoesEl.innerHTML = participantesSugeridos.length
-      ? `<div class="sugestao-ia">Elenco sugerido pela IA: ` +
-        participantesSugeridos
-          .map((p, i) => `${p.nome} (${PAPEIS[p.papel] || p.papel}) <button type="button" data-add-sugestao="${i}">+</button>`)
-          .join(" · ") +
-        `</div>`
-      : "";
-
-    sugestoesEl.querySelectorAll("[data-add-sugestao]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const sug = participantesSugeridos[Number(btn.dataset.addSugestao)];
-        participacoesLocal = participacoesLocal.filter((p) => p.nome !== sug.nome);
-        participacoesLocal.push(sug);
-        participantesSugeridos.splice(Number(btn.dataset.addSugestao), 1);
-        renderPills();
-        renderSugestoesParticipantes();
-      });
-    });
-  }
+  renderAvaliacaoIACell(avaliacaoIaCell, v);
 
   function renderPills() {
     pillsEl.innerHTML = participacoesLocal
@@ -515,7 +475,6 @@ function criarLinhaVideo(v) {
     });
   }
   renderPills();
-  renderSugestoesParticipantes();
 
   tr.querySelector(".add-participante").addEventListener("click", () => {
     const nomeInput = tr.querySelector('[data-field="novoNome"]');
@@ -527,20 +486,6 @@ function criarLinhaVideo(v) {
     nomeInput.value = "";
     renderPills();
   });
-
-  const sugestaoBtn = tr.querySelector(".usar-sugestao");
-  if (sugestaoBtn) {
-    sugestaoBtn.addEventListener("click", async () => {
-      await fetch("/api/ai/aplicar-sugestao", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ video_id: v.video_id }),
-      });
-      if (v.tipo_conteudo_sugerido) tipoConteudoSelect.value = v.tipo_conteudo_sugerido;
-      if (v.competicao_sugerida) competicaoInput.value = v.competicao_sugerida;
-      if (v.programa_sugerido) programaInput.value = v.programa_sugerido;
-    });
-  }
 
   tr.querySelector(".buscar-transcricao-row").addEventListener("click", async (event) => {
     const btn = event.currentTarget;
@@ -598,6 +543,7 @@ function criarLinhaVideo(v) {
 
       const novaLinha = criarLinhaVideo(v);
       tr.replaceWith(novaLinha);
+      renderAprovacaoIA();
     } catch (error) {
       alert(`Erro ao pedir sugestão à IA: ${error.message}`);
       btn.disabled = false;
@@ -630,9 +576,160 @@ function criarLinhaVideo(v) {
     delete sugestoesParticipantesPorVideo[v.video_id];
     await carregarPessoas();
     renderDashboards();
+    renderPessoasStats();
   });
 
   return tr;
+}
+
+// ---------- avaliação (aprovação/descarte) de sugestões da IA ----------
+// Usada tanto na coluna "Avaliação IA" da aba Vídeos quanto na aba
+// "Aprovação IA" — as duas mostram a mesma pendência e chamam as mesmas
+// ações, só muda a apresentação.
+
+function temSugestaoPendente(v) {
+  const temClassificacao =
+    (v.tipo_conteudo_sugerido && v.tipo_conteudo_sugerido !== v.tipo_conteudo) ||
+    (v.competicao_sugerida && v.competicao_sugerida !== v.competicao) ||
+    (v.programa_sugerido && v.programa_sugerido !== v.programa);
+  const temParticipantes = (sugestoesParticipantesPorVideo[v.video_id] || []).length > 0;
+  return Boolean(temClassificacao || temParticipantes);
+}
+
+function resumoSugestaoHtml(v) {
+  const partes = [];
+  if (v.tipo_conteudo_sugerido) partes.push(v.tipo_conteudo_sugerido);
+  if (v.competicao_sugerida) partes.push(`competição: ${v.competicao_sugerida}`);
+  if (v.programa_sugerido) partes.push(`programa: ${v.programa_sugerido}`);
+
+  const participantes = sugestoesParticipantesPorVideo[v.video_id] || [];
+  if (participantes.length) {
+    partes.push(`elenco: ${participantes.map((p) => `${p.nome} (${PAPEIS[p.papel] || p.papel})`).join(", ")}`);
+  }
+
+  if (!partes.length) return "";
+  const confianca = v.competicao_confianca != null ? ` (${Math.round(v.competicao_confianca * 100)}%)` : "";
+  return `${partes.join(" | ")}${confianca}`;
+}
+
+// Aplica a sugestão pendente (classificação e/ou elenco sugerido) como
+// dado oficial do vídeo. Atualiza o objeto `v` em memória e re-renderiza
+// as telas que dependem dele.
+async function aprovarSugestaoIA(v) {
+  const participantesSugeridos = sugestoesParticipantesPorVideo[v.video_id] || [];
+  const temClassificacao = v.tipo_conteudo_sugerido || v.competicao_sugerida || v.programa_sugerido;
+
+  if (temClassificacao) {
+    await fetch("/api/ai/aplicar-sugestao", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ video_id: v.video_id }),
+    });
+    if (v.tipo_conteudo_sugerido) v.tipo_conteudo = v.tipo_conteudo_sugerido;
+    if (v.competicao_sugerida) v.competicao = v.competicao_sugerida;
+    if (v.programa_sugerido) v.programa = v.programa_sugerido;
+  }
+
+  if (participantesSugeridos.length) {
+    const participacoes = (v.participacoes || []).map((p) => ({ ...p }));
+    for (const sug of participantesSugeridos) {
+      if (!participacoes.some((p) => p.nome === sug.nome && p.papel === sug.papel)) participacoes.push(sug);
+    }
+
+    await fetch("/api/enrich", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        video_id: v.video_id,
+        competicao: v.competicao || null,
+        programa: v.programa || null,
+        tipo_conteudo: v.tipo_conteudo || null,
+        participacoes,
+      }),
+    });
+
+    v.participacoes = participacoes;
+    v.elenco = participacoes.map((p) => p.nome);
+  }
+
+  v.tipo_conteudo_sugerido = null;
+  v.competicao_sugerida = null;
+  v.programa_sugerido = null;
+  v.competicao_confianca = null;
+  delete sugestoesParticipantesPorVideo[v.video_id];
+
+  await carregarPessoas();
+  renderVideosTable();
+  renderDashboards();
+  renderPessoasStats();
+  renderAprovacaoIA();
+}
+
+// Descarta a sugestão pendente sem alterar o que já estava salvo no vídeo.
+async function descartarSugestaoIA(v) {
+  await fetch("/api/ai/descartar-sugestao", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ video_id: v.video_id }),
+  });
+
+  v.tipo_conteudo_sugerido = null;
+  v.competicao_sugerida = null;
+  v.programa_sugerido = null;
+  v.competicao_confianca = null;
+  delete sugestoesParticipantesPorVideo[v.video_id];
+
+  renderVideosTable();
+  renderAprovacaoIA();
+}
+
+function renderAvaliacaoIACell(cell, v) {
+  if (!temSugestaoPendente(v)) {
+    cell.innerHTML = `<span class="hint">Sem sugestão pendente</span>`;
+    return;
+  }
+
+  cell.innerHTML = `
+    <div class="sugestao-ia">${resumoSugestaoHtml(v)}</div>
+    <div class="acoes-ia">
+      <button class="save-row aprovar-ia" type="button">Aprovar</button>
+      <button class="save-row descartar-ia" type="button">Descartar</button>
+    </div>
+  `;
+
+  cell.querySelector(".aprovar-ia").addEventListener("click", () => aprovarSugestaoIA(v));
+  cell.querySelector(".descartar-ia").addEventListener("click", () => descartarSugestaoIA(v));
+}
+
+function renderAprovacaoIA() {
+  const pendencias = videosCache.filter(temSugestaoPendente);
+  el("aprovacaoIACount").textContent = `${pendencias.length} vídeo(s) pendente(s)`;
+
+  const tbody = document.querySelector("#aprovacaoIATable tbody");
+  tbody.innerHTML = pendencias.length
+    ? pendencias
+        .map(
+          (v) => `
+      <tr data-video-id="${escapeAttr(v.video_id)}">
+        <td>${v.thumbnail_url ? `<img class="video-thumb" src="${escapeAttr(v.thumbnail_url)}" alt="" loading="lazy" />` : ""}</td>
+        <td class="wrap">${v.titulo || ""}</td>
+        <td class="wrap">${resumoSugestaoHtml(v)}</td>
+        <td>${v.competicao_confianca != null ? `${Math.round(v.competicao_confianca * 100)}%` : ""}</td>
+        <td>
+          <button class="save-row aprovar-ia" type="button">Aprovar</button>
+          <button class="save-row descartar-ia" type="button">Descartar</button>
+        </td>
+      </tr>`
+        )
+        .join("")
+    : `<tr><td colspan="5" class="hint">Nenhuma sugestão pendente de aprovação.</td></tr>`;
+
+  tbody.querySelectorAll("tr[data-video-id]").forEach((row) => {
+    const v = videosCache.find((vv) => vv.video_id === row.dataset.videoId);
+    if (!v) return;
+    row.querySelector(".aprovar-ia").addEventListener("click", () => aprovarSugestaoIA(v));
+    row.querySelector(".descartar-ia").addEventListener("click", () => descartarSugestaoIA(v));
+  });
 }
 
 function renderDashboards() {

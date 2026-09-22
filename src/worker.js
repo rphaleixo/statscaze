@@ -21,6 +21,7 @@ import {
   setParticipacoes,
   saveClassificacaoSugerida,
   aplicarClassificacaoSugerida,
+  descartarClassificacaoSugerida,
   getCompeticoesConhecidas,
   getProgramasConhecidos,
   listCompeticoesCadastradas,
@@ -462,6 +463,14 @@ async function handleAiAplicarSugestao(request, env) {
   return json({ ok: true });
 }
 
+async function handleAiDescartarSugestao(request, env) {
+  const body = await request.json();
+  if (!body.video_id) return json({ error: "video_id é obrigatório." }, 400);
+
+  await descartarClassificacaoSugerida(env.DB, body.video_id);
+  return json({ ok: true });
+}
+
 async function autoCollect(env, days = 2) {
   const handle = env.CHANNEL_HANDLE;
   if (!handle || !env.YOUTUBE_API_KEY) return;
@@ -578,6 +587,9 @@ export default {
       }
       if (url.pathname === "/api/ai/aplicar-sugestao" && request.method === "POST") {
         return await handleAiAplicarSugestao(request, env);
+      }
+      if (url.pathname === "/api/ai/descartar-sugestao" && request.method === "POST") {
+        return await handleAiDescartarSugestao(request, env);
       }
     } catch (error) {
       return json({ error: String(error?.message || error) }, 500);

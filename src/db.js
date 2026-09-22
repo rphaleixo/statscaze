@@ -290,6 +290,18 @@ export async function saveClassificacaoSugerida(db, videoId, { tipoConteudo, com
     .run();
 }
 
+export async function descartarClassificacaoSugerida(db, videoId) {
+  await db
+    .prepare(
+      `UPDATE videos
+       SET tipo_conteudo_sugerido = NULL, competicao_sugerida = NULL, programa_sugerido = NULL,
+           competicao_confianca = NULL
+       WHERE video_id = ?`
+    )
+    .bind(videoId)
+    .run();
+}
+
 export async function aplicarClassificacaoSugerida(db, videoId) {
   await db
     .prepare(
