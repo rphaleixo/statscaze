@@ -21,7 +21,7 @@ el("dateFrom").value = daysAgo(30);
 el("dateTo").value = today();
 
 function selectedContentTypes() {
-  return Array.from(document.querySelectorAll('.sidebar input[type="checkbox"][value]'))
+  return Array.from(document.querySelectorAll('.tipos-video-checkboxes input[type="checkbox"][value]'))
     .filter((cb) => cb.checked)
     .map((cb) => cb.value);
 }
@@ -446,6 +446,7 @@ function criarLinhaVideo(v) {
     .filter((sug) => !participacoesLocal.some((p) => p.nome === sug.nome && p.papel === sug.papel));
 
   tr.innerHTML = `
+    <td><code>${v.video_id}</code></td>
     <td>${CONTENT_TYPE_LABELS[v.tipo_video] || v.tipo_video || ""}</td>
     <td class="wrap">${v.titulo || ""}</td>
     <td>${(v.data_publicacao || "").slice(0, 10)}</td>

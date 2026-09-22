@@ -7,32 +7,11 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div class="layout">
-    <aside class="sidebar">
+  <div class="layout layout-full">
+    <header class="topbar">
       <h1>Cazé TV</h1>
       <p class="subtitle">Mapeador de Vídeos</p>
-
-      <section>
-        <h2>Canal e período</h2>
-        <label>Canal (handle, sem @)
-          <input id="channelHandle" type="text" value="CazeTV" />
-        </label>
-        <label>Data inicial
-          <input id="dateFrom" type="date" />
-        </label>
-        <label>Data final
-          <input id="dateTo" type="date" />
-        </label>
-      </section>
-
-      <section>
-        <h2>Tipo de vídeo</h2>
-        <label class="checkbox"><input type="checkbox" value="live" checked /> Live</label>
-        <label class="checkbox"><input type="checkbox" value="short" checked /> Short</label>
-        <label class="checkbox"><input type="checkbox" value="video" checked /> Vídeo normal</label>
-        <p class="hint">Usado tanto para buscar quanto para filtrar o que aparece nas outras abas.</p>
-      </section>
-    </aside>
+    </header>
 
     <main class="content">
       <section id="execucao" class="execucao">
@@ -54,10 +33,31 @@
 
       <section id="tab-mapeamento" class="tab-panel active">
         <p class="hint">
-          Usa o canal, período e tipo de vídeo escolhidos na barra lateral. Vídeos já buscados
-          antes não são alterados numa nova busca — só views, comentários e contagem de chat são
-          atualizados; título, descrição, duração e classificação continuam como estavam.
+          Vídeos já buscados antes não são alterados numa nova busca — só views, comentários e
+          contagem de chat são atualizados; título, descrição, duração e classificação continuam
+          como estavam.
         </p>
+
+        <div class="chart-card">
+          <h4>Canal, período e tipo de vídeo</h4>
+          <p class="hint">Usado tanto para buscar quanto para filtrar o que aparece nas outras abas.</p>
+          <div class="mapeamento-filtros">
+            <label>Canal (handle, sem @)
+              <input id="channelHandle" type="text" value="CazeTV" />
+            </label>
+            <label>Data inicial
+              <input id="dateFrom" type="date" />
+            </label>
+            <label>Data final
+              <input id="dateTo" type="date" />
+            </label>
+            <div class="tipos-video-checkboxes">
+              <label class="checkbox"><input type="checkbox" value="live" checked /> Live</label>
+              <label class="checkbox"><input type="checkbox" value="short" checked /> Short</label>
+              <label class="checkbox"><input type="checkbox" value="video" checked /> Vídeo normal</label>
+            </div>
+          </div>
+        </div>
 
         <div class="chart-card">
           <h4>Etapa 1 — Buscar vídeos novos</h4>
@@ -96,25 +96,27 @@
           pessoa pode ter papéis diferentes em vídeos diferentes). Depois clique em "Salvar".
         </p>
 
-        <div class="chart-card">
-          <h4>Importar CSV</h4>
-          <p class="hint">
-            Formato: uma linha por pessoa. Colunas: <code>video_id</code>, <code>tipo_conteudo</code>
-            (transmissao/programa/especial, opcional), <code>competicao</code> (opcional),
-            <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (narrador,
-            comentarista, reporter ou apresentador). Repita o <code>video_id</code> em uma linha
-            para cada pessoa do vídeo.
-          </p>
-          <input id="csvImportFile" type="file" accept=".csv" />
-          <button id="btnImportarCsv" class="primary" style="margin-top:10px;">Importar CSV</button>
-          <div id="csvImportStatus" class="status-msg"></div>
-        </div>
+        <details class="csv-import-collapse">
+          <summary>Importar CSV (avançado)</summary>
+          <div class="csv-import-body">
+            <p class="hint">
+              Formato: uma linha por pessoa. Colunas: <code>video_id</code>, <code>tipo_conteudo</code>
+              (transmissao/programa/especial, opcional), <code>competicao</code> (opcional),
+              <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (narrador,
+              comentarista, reporter ou apresentador). Repita o <code>video_id</code> em uma linha
+              para cada pessoa do vídeo.
+            </p>
+            <input id="csvImportFile" type="file" accept=".csv" />
+            <button id="btnImportarCsv" style="margin-top:10px;">Importar CSV</button>
+            <div id="csvImportStatus" class="status-msg"></div>
+          </div>
+        </details>
 
         <div class="table-wrap">
           <table id="videosTable">
             <thead>
               <tr>
-                <th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
+                <th>ID (YouTube)</th><th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
                 <th>Views</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
                 <th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
                 <th>Elenco do vídeo</th><th></th>

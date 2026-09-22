@@ -225,23 +225,39 @@ export async function setParticipacoes(db, videoId, participacoes) {
     .run();
 }
 
+// O D1 tem um limite de parâmetros por consulta (bem abaixo do total de
+// vídeos que já temos mapeados), então uma lista de IDs precisa ser
+// dividida em lotes menores — senão a consulta falha inteira e a tela de
+// vídeos aparenta estar "zerada" sem nenhum aviso claro do motivo.
+const TAMANHO_LOTE_SQL = 90;
+
+function dividirEmLotes(itens, tamanho) {
+  const lotes = [];
+  for (let i = 0; i < itens.length; i += tamanho) lotes.push(itens.slice(i, i + tamanho));
+  return lotes;
+}
+
 async function getParticipacoesPorVideo(db, videoIds) {
   if (!videoIds.length) return {};
 
-  const placeholders = videoIds.map(() => "?").join(",");
-  const stmt = db.prepare(
-    `SELECT part.video_id, part.papel, p.nome
-     FROM participacoes part JOIN pessoas p ON p.id = part.pessoa_id
-     WHERE part.video_id IN (${placeholders})
-     ORDER BY p.nome`
-  );
-  const result = await stmt.bind(...videoIds).all();
-
   const map = {};
-  for (const row of result.results) {
-    if (!map[row.video_id]) map[row.video_id] = [];
-    map[row.video_id].push({ nome: row.nome, papel: row.papel });
+
+  for (const lote of dividirEmLotes(videoIds, TAMANHO_LOTE_SQL)) {
+    const placeholders = lote.map(() => "?").join(",");
+    const stmt = db.prepare(
+      `SELECT part.video_id, part.papel, p.nome
+       FROM participacoes part JOIN pessoas p ON p.id = part.pessoa_id
+       WHERE part.video_id IN (${placeholders})
+       ORDER BY p.nome`
+    );
+    const result = await stmt.bind(...lote).all();
+
+    for (const row of result.results) {
+      if (!map[row.video_id]) map[row.video_id] = [];
+      map[row.video_id].push({ nome: row.nome, papel: row.papel });
+    }
   }
+
   return map;
 }
 
@@ -364,13 +380,17 @@ export async function getVideoIdsPendingTranscript(db, { dateFrom, dateTo, conte
 export async function getVideoTitlesUrls(db, videoIds) {
   if (!videoIds.length) return {};
 
-  const placeholders = videoIds.map(() => "?").join(",");
-  const stmt = db.prepare(`SELECT video_id, titulo, url FROM videos WHERE video_id IN (${placeholders})`);
-  const result = await stmt.bind(...videoIds).all();
-
   const map = {};
-  for (const row of result.results) {
-    map[row.video_id] = { titulo: row.titulo, url: row.url };
+
+  for (const lote of dividirEmLotes(videoIds, TAMANHO_LOTE_SQL)) {
+    const placeholders = lote.map(() => "?").join(",");
+    const stmt = db.prepare(`SELECT video_id, titulo, url FROM videos WHERE video_id IN (${placeholders})`);
+    const result = await stmt.bind(...lote).all();
+
+    for (const row of result.results) {
+      map[row.video_id] = { titulo: row.titulo, url: row.url };
+    }
   }
+
   return map;
 }
