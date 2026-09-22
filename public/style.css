@@ -138,9 +138,15 @@ tr:hover td { background: rgba(255,255,255,0.02); }
 .chart-card h5 { font-size: 13px; color: var(--text-muted); margin: 18px 0 8px; text-transform: uppercase; letter-spacing: .03em; }
 code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
-.pessoa-form { display: grid; grid-template-columns: 1fr 160px auto; gap: 8px; margin-bottom: 14px; align-items: end; }
-.pessoa-form input, .pessoa-form select, .pessoa-form button { margin-top: 0; width: auto; }
-.pessoa-form button { padding: 8px 14px; }
+.pessoa-form { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
+.pessoa-form input { margin-top: 0; width: auto; flex: 1; min-width: 160px; }
+.pessoa-form button { margin-top: 0; width: auto; padding: 8px 14px; flex-shrink: 0; }
+.competicao-form input { flex: 1; }
+
+.papeis-checkboxes { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13px; }
+.papeis-checkboxes label { display: flex; align-items: center; gap: 4px; margin-bottom: 0; font-size: 13px; white-space: nowrap; }
+.papeis-checkboxes input { width: auto; }
+td .papeis-checkboxes { padding: 4px 0; }
 
 .elenco-video-cell { min-width: 280px; }
 .elenco-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }

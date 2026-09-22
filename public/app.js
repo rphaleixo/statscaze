@@ -48,6 +48,20 @@ function tipoConteudoOptionsHtml(selected) {
       .join("");
 }
 
+function papeisCheckboxesHtml(idPrefix, selecionados) {
+  const marcados = new Set(selecionados || []);
+  return Object.entries(PAPEIS)
+    .map(
+      ([valor, label]) => `
+      <label><input type="checkbox" data-papel-checkbox="${idPrefix}" value="${valor}"${marcados.has(valor) ? " checked" : ""}/> ${label}</label>`
+    )
+    .join("");
+}
+
+function papeisMarcados(container, idPrefix) {
+  return Array.from(container.querySelectorAll(`[data-papel-checkbox="${idPrefix}"]:checked`)).map((cb) => cb.value);
+}
+
 // ---------- progresso / log ----------
 
 const progressBar = el("progressBar");
@@ -99,7 +113,7 @@ el("btnMapear").addEventListener("click", async () => {
   const contentTypes = selectedContentTypes();
 
   if (!handle || !dateFrom || !dateTo || contentTypes.length === 0) {
-    alert("Preencha canal, período e pelo menos um tipo de conteúdo.");
+    alert("Preencha canal, período e pelo menos um tipo de vídeo.");
     return;
   }
 
@@ -154,7 +168,7 @@ el("btnMapear").addEventListener("click", async () => {
     }
 
     setProgress(allIds.length, allIds.length, "Mapeamento");
-    statusMsg(`Mapeamento concluído: ${saved} vídeo(s).`, "success");
+    statusMsg(`Mapeamento concluído: ${saved} vídeo(s). Vídeos já existentes só tiveram views/comentários/chat atualizados.`, "success");
     await carregarVideos();
   } catch (error) {
     statusMsg(`Erro durante o mapeamento: ${error.message}`, "error");
@@ -281,7 +295,7 @@ el("btnSugerirIA").addEventListener("click", async () => {
     }
 
     setProgress(videoIds.length, videoIds.length, "Sugestão IA");
-    statusMsg(`Sugestões geradas para ${processed} vídeo(s). Revise na aba Enriquecimento.`, "success");
+    statusMsg(`Sugestões geradas para ${processed} vídeo(s). Revise na aba Vídeos.`, "success");
     await carregarVideos();
   } catch (error) {
     statusMsg(`Erro ao pedir sugestões à IA: ${error.message}`, "error");
@@ -290,10 +304,11 @@ el("btnSugerirIA").addEventListener("click", async () => {
   }
 });
 
-// ---------- carregar / exibir dados ----------
+// ---------- carregar dados ----------
 
 let videosCache = [];
 let pessoasCache = [];
+let competicoesCache = [];
 
 async function carregarVideos() {
   const dateFrom = el("dateFrom").value;
@@ -307,7 +322,6 @@ async function carregarVideos() {
   el("downloadCsv").href = `/api/export.csv?${params}`;
   renderVideosTable();
   renderDashboards();
-  renderEnrichTable();
 }
 
 async function carregarPessoas() {
@@ -317,30 +331,24 @@ async function carregarPessoas() {
   renderPessoasDatalist();
 }
 
-function renderVideosTable() {
-  el("videosCount").textContent = `${videosCache.length} vídeo(s) no período/tipo selecionado`;
-  const tbody = document.querySelector("#videosTable tbody");
-  tbody.innerHTML = "";
-
-  for (const v of videosCache) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${CONTENT_TYPE_LABELS[v.tipo_video] || v.tipo_video || ""}</td>
-      <td>${TIPOS_CONTEUDO[v.tipo_conteudo] || ""}</td>
-      <td class="wrap">${v.titulo || ""}</td>
-      <td>${(v.data_publicacao || "").slice(0, 10)}</td>
-      <td>${formatDuration(v.duracao_segundos)}</td>
-      <td>${v.views ?? ""}</td>
-      <td>${v.comentarios ?? ""}</td>
-      <td>${v.mensagens_chat ?? ""}</td>
-      <td>${v.competicao || v.programa || ""}</td>
-      <td>${(v.participacoes || []).map((p) => `${p.nome} (${PAPEIS[p.papel] || p.papel})`).join(", ")}</td>
-      <td>${v.transcricao_sucesso ? "✓" : ""}</td>
-      <td><a href="${v.url}" target="_blank" rel="noopener">abrir</a></td>
-    `;
-    tbody.appendChild(tr);
-  }
+async function carregarCompeticoes() {
+  const res = await fetch("/api/competicoes").then((r) => r.json());
+  competicoesCache = res.competicoes || [];
+  renderCompeticoesTable();
+  renderCompeticoesDatalist();
 }
+
+function getOrCreateDatalist(id) {
+  let datalist = el(id);
+  if (!datalist) {
+    datalist = document.createElement("datalist");
+    datalist.id = id;
+    document.body.appendChild(datalist);
+  }
+  return datalist;
+}
+
+// ---------- aba Vídeos (listagem + classificação + elenco por vídeo) ----------
 
 function renderBarChart(container, entries) {
   const max = Math.max(1, ...entries.map((e) => e.value));
@@ -356,11 +364,184 @@ function renderBarChart(container, entries) {
     .join("");
 }
 
+function renderVideosTable() {
+  el("videosCount").textContent = `${videosCache.length} vídeo(s) no período/tipo selecionado`;
+  const tbody = document.querySelector("#videosTable tbody");
+  tbody.innerHTML = "";
+
+  for (const v of videosCache) {
+    tbody.appendChild(criarLinhaVideo(v));
+  }
+}
+
+function criarLinhaVideo(v) {
+  const tr = document.createElement("tr");
+  let participacoesLocal = (v.participacoes || []).map((p) => ({ ...p }));
+
+  const temSugestaoClassificacao =
+    (v.tipo_conteudo_sugerido && v.tipo_conteudo_sugerido !== v.tipo_conteudo) ||
+    (v.competicao_sugerida && v.competicao_sugerida !== v.competicao) ||
+    (v.programa_sugerido && v.programa_sugerido !== v.programa);
+
+  const partesSugestao = [];
+  if (v.tipo_conteudo_sugerido) partesSugestao.push(TIPOS_CONTEUDO[v.tipo_conteudo_sugerido] || v.tipo_conteudo_sugerido);
+  if (v.competicao_sugerida) partesSugestao.push(`competição: ${v.competicao_sugerida}`);
+  if (v.programa_sugerido) partesSugestao.push(`programa: ${v.programa_sugerido}`);
+
+  const sugestaoClassificacaoHtml = temSugestaoClassificacao
+    ? `<div class="sugestao-ia">
+        Sugestão IA: ${partesSugestao.join(" | ")} (${Math.round((v.competicao_confianca || 0) * 100)}%)
+        <button class="usar-sugestao" type="button">Usar</button>
+      </div>`
+    : "";
+
+  const participantesSugeridos = (sugestoesParticipantesPorVideo[v.video_id] || [])
+    .filter((sug) => !participacoesLocal.some((p) => p.nome === sug.nome && p.papel === sug.papel));
+
+  tr.innerHTML = `
+    <td>${CONTENT_TYPE_LABELS[v.tipo_video] || v.tipo_video || ""}</td>
+    <td class="wrap">${v.titulo || ""}</td>
+    <td>${(v.data_publicacao || "").slice(0, 10)}</td>
+    <td>${formatDuration(v.duracao_segundos)}</td>
+    <td>${v.views ?? ""}</td>
+    <td>${v.comentarios ?? ""}</td>
+    <td>${v.mensagens_chat ?? ""}</td>
+    <td>${v.transcricao_sucesso ? "✓" : ""}</td>
+    <td><a href="${v.url}" target="_blank" rel="noopener">abrir</a></td>
+    <td>
+      <select data-field="tipoConteudo">${tipoConteudoOptionsHtml(v.tipo_conteudo)}</select>
+      ${sugestaoClassificacaoHtml}
+    </td>
+    <td><input type="text" list="competicoesDatalist" value="${escapeAttr(v.competicao)}" data-field="competicao" /></td>
+    <td><input type="text" value="${escapeAttr(v.programa)}" data-field="programa" /></td>
+    <td class="elenco-video-cell">
+      <div class="elenco-pills"></div>
+      <div class="elenco-sugestoes"></div>
+      <div class="elenco-add-form">
+        <input type="text" list="pessoasDatalist" placeholder="Nome" data-field="novoNome" />
+        <select data-field="novoPapel"></select>
+        <button type="button" class="add-participante">+</button>
+      </div>
+    </td>
+    <td><button class="save-row">Salvar</button></td>
+  `;
+
+  const pillsEl = tr.querySelector(".elenco-pills");
+  const sugestoesEl = tr.querySelector(".elenco-sugestoes");
+  const tipoConteudoSelect = tr.querySelector('[data-field="tipoConteudo"]');
+  const competicaoInput = tr.querySelector('[data-field="competicao"]');
+  const programaInput = tr.querySelector('[data-field="programa"]');
+  const novoPapelSelect = tr.querySelector('[data-field="novoPapel"]');
+
+  function papeisPermitidosAtual() {
+    return PAPEIS_POR_TIPO_CONTEUDO[tipoConteudoSelect.value] || Object.keys(PAPEIS);
+  }
+
+  function atualizarPapeisDisponiveis() {
+    novoPapelSelect.innerHTML = papelOptionsHtml(undefined, papeisPermitidosAtual());
+  }
+  atualizarPapeisDisponiveis();
+  tipoConteudoSelect.addEventListener("change", atualizarPapeisDisponiveis);
+
+  function renderSugestoesParticipantes() {
+    sugestoesEl.innerHTML = participantesSugeridos.length
+      ? `<div class="sugestao-ia">Elenco sugerido pela IA: ` +
+        participantesSugeridos
+          .map((p, i) => `${p.nome} (${PAPEIS[p.papel] || p.papel}) <button type="button" data-add-sugestao="${i}">+</button>`)
+          .join(" · ") +
+        `</div>`
+      : "";
+
+    sugestoesEl.querySelectorAll("[data-add-sugestao]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const sug = participantesSugeridos[Number(btn.dataset.addSugestao)];
+        participacoesLocal = participacoesLocal.filter((p) => p.nome !== sug.nome);
+        participacoesLocal.push(sug);
+        participantesSugeridos.splice(Number(btn.dataset.addSugestao), 1);
+        renderPills();
+        renderSugestoesParticipantes();
+      });
+    });
+  }
+
+  function renderPills() {
+    pillsEl.innerHTML = participacoesLocal
+      .map(
+        (p, i) => `<span class="elenco-pill">${p.nome} (${PAPEIS[p.papel] || p.papel})<button type="button" data-remove="${i}">×</button></span>`
+      )
+      .join("");
+
+    pillsEl.querySelectorAll("[data-remove]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        participacoesLocal.splice(Number(btn.dataset.remove), 1);
+        renderPills();
+      });
+    });
+  }
+  renderPills();
+  renderSugestoesParticipantes();
+
+  tr.querySelector(".add-participante").addEventListener("click", () => {
+    const nomeInput = tr.querySelector('[data-field="novoNome"]');
+    const nome = nomeInput.value.trim();
+    if (!nome) return;
+
+    participacoesLocal = participacoesLocal.filter((p) => p.nome !== nome);
+    participacoesLocal.push({ nome, papel: novoPapelSelect.value });
+    nomeInput.value = "";
+    renderPills();
+  });
+
+  const sugestaoBtn = tr.querySelector(".usar-sugestao");
+  if (sugestaoBtn) {
+    sugestaoBtn.addEventListener("click", async () => {
+      await fetch("/api/ai/aplicar-sugestao", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ video_id: v.video_id }),
+      });
+      if (v.tipo_conteudo_sugerido) tipoConteudoSelect.value = v.tipo_conteudo_sugerido;
+      if (v.competicao_sugerida) competicaoInput.value = v.competicao_sugerida;
+      if (v.programa_sugerido) programaInput.value = v.programa_sugerido;
+      atualizarPapeisDisponiveis();
+    });
+  }
+
+  tr.querySelector(".save-row").addEventListener("click", async () => {
+    const competicao = competicaoInput.value.trim();
+    const programa = programaInput.value.trim();
+    const tipoConteudo = tipoConteudoSelect.value;
+
+    await fetch("/api/enrich", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        video_id: v.video_id,
+        competicao: competicao || null,
+        programa: programa || null,
+        tipo_conteudo: tipoConteudo || null,
+        participacoes: participacoesLocal,
+      }),
+    });
+
+    v.competicao = competicao || null;
+    v.programa = programa || null;
+    v.tipo_conteudo = tipoConteudo || null;
+    v.participacoes = participacoesLocal.map((p) => ({ ...p }));
+    v.elenco = participacoesLocal.map((p) => p.nome);
+    delete sugestoesParticipantesPorVideo[v.video_id];
+    await carregarPessoas();
+    renderDashboards();
+  });
+
+  return tr;
+}
+
 function renderDashboards() {
   const metricsEl = el("metrics");
 
   if (videosCache.length === 0) {
-    metricsEl.innerHTML = `<p class="hint">Sem dados para mostrar ainda. Rode o mapeamento na barra lateral.</p>`;
+    metricsEl.innerHTML = `<p class="hint">Sem dados para mostrar ainda. Rode o mapeamento na aba Mapeamento.</p>`;
     el("chartTipos").innerHTML = "";
     el("chartCompeticao").innerHTML = "";
     el("chartPrograma").innerHTML = "";
@@ -426,7 +607,7 @@ function renderDashboards() {
   renderCastDashboard();
 }
 
-// ---------- elenco cadastrado (pessoas) ----------
+// ---------- aba Elenco (pessoas cadastradas) ----------
 
 function renderPessoasTable() {
   const tbody = document.querySelector("#pessoasTable tbody");
@@ -435,7 +616,8 @@ function renderPessoasTable() {
       (p) => `
       <tr>
         <td><input type="text" value="${escapeAttr(p.nome)}" data-pessoa-nome="${p.id}" /></td>
-        <td><select data-pessoa-papel="${p.id}">${papelOptionsHtml(p.papel_padrao)}</select></td>
+        <td><input type="text" value="${escapeAttr((p.apelidos || []).join(", "))}" data-pessoa-apelidos="${p.id}" /></td>
+        <td><div class="papeis-checkboxes">${papeisCheckboxesHtml(`pessoa-${p.id}`, p.papeis_padrao)}</div></td>
         <td>
           <button class="save-row" data-salvar-pessoa="${p.id}">Salvar</button>
           <button class="save-row" data-excluir-pessoa="${p.id}">Excluir</button>
@@ -448,12 +630,13 @@ function renderPessoasTable() {
     btn.addEventListener("click", async () => {
       const id = btn.dataset.salvarPessoa;
       const nome = tbody.querySelector(`[data-pessoa-nome="${id}"]`).value.trim();
-      const papel = tbody.querySelector(`[data-pessoa-papel="${id}"]`).value;
+      const apelidos = tbody.querySelector(`[data-pessoa-apelidos="${id}"]`).value.split(",").map((s) => s.trim()).filter(Boolean);
+      const papeis = papeisMarcados(tbody, `pessoa-${id}`);
 
       await fetch("/api/pessoas/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: Number(id), nome, papel_padrao: papel }),
+        body: JSON.stringify({ id: Number(id), nome, apelidos, papeis_padrao: papeis }),
       });
       await carregarPessoas();
     });
@@ -475,191 +658,99 @@ function renderPessoasTable() {
 }
 
 function renderPessoasDatalist() {
-  let datalist = el("pessoasDatalist");
-  if (!datalist) {
-    datalist = document.createElement("datalist");
-    datalist.id = "pessoasDatalist";
-    document.body.appendChild(datalist);
-  }
-  datalist.innerHTML = pessoasCache.map((p) => `<option value="${escapeAttr(p.nome)}"></option>`).join("");
+  const datalist = getOrCreateDatalist("pessoasDatalist");
+  datalist.innerHTML = pessoasCache
+    .flatMap((p) => [p.nome, ...(p.apelidos || [])])
+    .map((nome) => `<option value="${escapeAttr(nome)}"></option>`)
+    .join("");
 }
+
+el("novaPessoaPapeis").innerHTML = papeisCheckboxesHtml("nova-pessoa", []);
 
 el("btnAdicionarPessoa").addEventListener("click", async () => {
   const nome = el("novaPessoaNome").value.trim();
-  const papel = el("novaPessoaPapel").value;
+  const apelidos = el("novaPessoaApelidos").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const papeis = papeisMarcados(document, "nova-pessoa");
   if (!nome) return;
 
   await fetch("/api/pessoas", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nome, papel_padrao: papel }),
+    body: JSON.stringify({ nome, apelidos, papeis_padrao: papeis }),
   });
 
   el("novaPessoaNome").value = "";
+  el("novaPessoaApelidos").value = "";
+  document.querySelectorAll('[data-papel-checkbox="nova-pessoa"]').forEach((cb) => { cb.checked = false; });
   await carregarPessoas();
 });
 
-// ---------- enriquecimento por vídeo (competição + elenco) ----------
+// ---------- aba Competições ----------
 
-function renderEnrichTable() {
-  const tbody = document.querySelector("#enrichTable tbody");
-  tbody.innerHTML = "";
+function renderCompeticoesTable() {
+  const tbody = document.querySelector("#competicoesTable tbody");
+  tbody.innerHTML = competicoesCache
+    .map(
+      (c) => `
+      <tr>
+        <td><input type="text" value="${escapeAttr(c.nome)}" data-competicao-nome="${c.id}" /></td>
+        <td>
+          <button class="save-row" data-salvar-competicao="${c.id}">Salvar</button>
+          <button class="save-row" data-excluir-competicao="${c.id}">Excluir</button>
+        </td>
+      </tr>`
+    )
+    .join("");
 
-  for (const v of videosCache) {
-    const tr = document.createElement("tr");
-    let participacoesLocal = (v.participacoes || []).map((p) => ({ ...p }));
-
-    const temSugestaoClassificacao =
-      (v.tipo_conteudo_sugerido && v.tipo_conteudo_sugerido !== v.tipo_conteudo) ||
-      (v.competicao_sugerida && v.competicao_sugerida !== v.competicao) ||
-      (v.programa_sugerido && v.programa_sugerido !== v.programa);
-
-    const partesSugestao = [];
-    if (v.tipo_conteudo_sugerido) partesSugestao.push(TIPOS_CONTEUDO[v.tipo_conteudo_sugerido] || v.tipo_conteudo_sugerido);
-    if (v.competicao_sugerida) partesSugestao.push(`competição: ${v.competicao_sugerida}`);
-    if (v.programa_sugerido) partesSugestao.push(`programa: ${v.programa_sugerido}`);
-
-    const sugestaoClassificacaoHtml = temSugestaoClassificacao
-      ? `<div class="sugestao-ia">
-          Sugestão IA: ${partesSugestao.join(" | ")} (${Math.round((v.competicao_confianca || 0) * 100)}%)
-          <button class="usar-sugestao" type="button">Usar</button>
-        </div>`
-      : "";
-
-    const participantesSugeridos = (sugestoesParticipantesPorVideo[v.video_id] || [])
-      .filter((sug) => !participacoesLocal.some((p) => p.nome === sug.nome && p.papel === sug.papel));
-
-    tr.innerHTML = `
-      <td class="wrap">${v.titulo || ""}${sugestaoClassificacaoHtml}</td>
-      <td><select data-field="tipoConteudo">${tipoConteudoOptionsHtml(v.tipo_conteudo)}</select></td>
-      <td><input type="text" value="${escapeAttr(v.competicao)}" data-field="competicao" /></td>
-      <td><input type="text" value="${escapeAttr(v.programa)}" data-field="programa" /></td>
-      <td class="elenco-video-cell">
-        <div class="elenco-pills"></div>
-        <div class="elenco-sugestoes"></div>
-        <div class="elenco-add-form">
-          <input type="text" list="pessoasDatalist" placeholder="Nome" data-field="novoNome" />
-          <select data-field="novoPapel"></select>
-          <button type="button" class="add-participante">+</button>
-        </div>
-      </td>
-      <td><button class="save-row">Salvar</button></td>
-    `;
-
-    const pillsEl = tr.querySelector(".elenco-pills");
-    const sugestoesEl = tr.querySelector(".elenco-sugestoes");
-    const tipoConteudoSelect = tr.querySelector('[data-field="tipoConteudo"]');
-    const competicaoInput = tr.querySelector('[data-field="competicao"]');
-    const programaInput = tr.querySelector('[data-field="programa"]');
-    const novoPapelSelect = tr.querySelector('[data-field="novoPapel"]');
-
-    function papeisPermitidosAtual() {
-      return PAPEIS_POR_TIPO_CONTEUDO[tipoConteudoSelect.value] || Object.keys(PAPEIS);
-    }
-
-    function atualizarPapeisDisponiveis() {
-      novoPapelSelect.innerHTML = papelOptionsHtml(undefined, papeisPermitidosAtual());
-    }
-    atualizarPapeisDisponiveis();
-    tipoConteudoSelect.addEventListener("change", atualizarPapeisDisponiveis);
-
-    function renderSugestoesParticipantes() {
-      sugestoesEl.innerHTML = participantesSugeridos.length
-        ? `<div class="sugestao-ia">Elenco sugerido pela IA: ` +
-          participantesSugeridos
-            .map((p, i) => `${p.nome} (${PAPEIS[p.papel] || p.papel}) <button type="button" data-add-sugestao="${i}">+</button>`)
-            .join(" · ") +
-          `</div>`
-        : "";
-
-      sugestoesEl.querySelectorAll("[data-add-sugestao]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          const sug = participantesSugeridos[Number(btn.dataset.addSugestao)];
-          participacoesLocal = participacoesLocal.filter((p) => p.nome !== sug.nome);
-          participacoesLocal.push(sug);
-          participantesSugeridos.splice(Number(btn.dataset.addSugestao), 1);
-          renderPills();
-          renderSugestoesParticipantes();
-        });
-      });
-    }
-
-    function renderPills() {
-      pillsEl.innerHTML = participacoesLocal
-        .map(
-          (p, i) => `<span class="elenco-pill">${p.nome} (${PAPEIS[p.papel] || p.papel})<button type="button" data-remove="${i}">×</button></span>`
-        )
-        .join("");
-
-      pillsEl.querySelectorAll("[data-remove]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          participacoesLocal.splice(Number(btn.dataset.remove), 1);
-          renderPills();
-        });
-      });
-    }
-    renderPills();
-    renderSugestoesParticipantes();
-
-    tr.querySelector(".add-participante").addEventListener("click", () => {
-      const nomeInput = tr.querySelector('[data-field="novoNome"]');
-      const nome = nomeInput.value.trim();
+  tbody.querySelectorAll("[data-salvar-competicao]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.salvarCompeticao;
+      const nome = tbody.querySelector(`[data-competicao-nome="${id}"]`).value.trim();
       if (!nome) return;
 
-      participacoesLocal = participacoesLocal.filter((p) => p.nome !== nome);
-      participacoesLocal.push({ nome, papel: novoPapelSelect.value });
-      nomeInput.value = "";
-      renderPills();
-    });
-
-    const sugestaoBtn = tr.querySelector(".usar-sugestao");
-    if (sugestaoBtn) {
-      sugestaoBtn.addEventListener("click", async () => {
-        await fetch("/api/ai/aplicar-sugestao", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ video_id: v.video_id }),
-        });
-        if (v.tipo_conteudo_sugerido) tipoConteudoSelect.value = v.tipo_conteudo_sugerido;
-        if (v.competicao_sugerida) competicaoInput.value = v.competicao_sugerida;
-        if (v.programa_sugerido) programaInput.value = v.programa_sugerido;
-        atualizarPapeisDisponiveis();
-      });
-    }
-
-    tr.querySelector(".save-row").addEventListener("click", async () => {
-      const competicao = competicaoInput.value.trim();
-      const programa = programaInput.value.trim();
-      const tipoConteudo = tipoConteudoSelect.value;
-
-      await fetch("/api/enrich", {
+      await fetch("/api/competicoes/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          video_id: v.video_id,
-          competicao: competicao || null,
-          programa: programa || null,
-          tipo_conteudo: tipoConteudo || null,
-          participacoes: participacoesLocal,
-        }),
+        body: JSON.stringify({ id: Number(id), nome }),
       });
-
-      v.competicao = competicao || null;
-      v.programa = programa || null;
-      v.tipo_conteudo = tipoConteudo || null;
-      v.participacoes = participacoesLocal.map((p) => ({ ...p }));
-      v.elenco = participacoesLocal.map((p) => p.nome);
-      delete sugestoesParticipantesPorVideo[v.video_id];
-      await carregarPessoas();
-      renderVideosTable();
-      renderDashboards();
+      await carregarCompeticoes();
     });
+  });
 
-    tbody.appendChild(tr);
-  }
+  tbody.querySelectorAll("[data-excluir-competicao]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (!confirm("Excluir essa competição da lista de referência?")) return;
+
+      await fetch("/api/competicoes/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: Number(btn.dataset.excluirCompeticao) }),
+      });
+      await carregarCompeticoes();
+    });
+  });
 }
 
-// ---------- importar CSV de enriquecimento ----------
+function renderCompeticoesDatalist() {
+  const datalist = getOrCreateDatalist("competicoesDatalist");
+  datalist.innerHTML = competicoesCache.map((c) => `<option value="${escapeAttr(c.nome)}"></option>`).join("");
+}
+
+el("btnAdicionarCompeticao").addEventListener("click", async () => {
+  const nome = el("novaCompeticaoNome").value.trim();
+  if (!nome) return;
+
+  await fetch("/api/competicoes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nome }),
+  });
+
+  el("novaCompeticaoNome").value = "";
+  await carregarCompeticoes();
+});
+
+// ---------- importar CSV (classificação + elenco por vídeo) ----------
 
 el("btnImportarCsv").addEventListener("click", async () => {
   const fileInput = el("csvImportFile");
@@ -700,7 +791,7 @@ el("btnImportarCsv").addEventListener("click", async () => {
   }
 });
 
-// ---------- performance do elenco ----------
+// ---------- aba Dashboards: performance do elenco ----------
 
 function participantesDoVideo(v, papelFiltro) {
   return (v.participacoes || []).filter((p) => !papelFiltro || p.papel === papelFiltro);
@@ -864,7 +955,6 @@ function renderCastDashboard() {
   });
 });
 
-el("novaPessoaPapel").innerHTML = papelOptionsHtml("comentarista");
-
 carregarPessoas();
+carregarCompeticoes();
 carregarVideos();

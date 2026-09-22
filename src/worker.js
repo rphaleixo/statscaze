@@ -25,6 +25,10 @@ import {
   aplicarClassificacaoSugerida,
   getCompeticoesConhecidas,
   getProgramasConhecidos,
+  listCompeticoesCadastradas,
+  createCompeticaoCadastrada,
+  updateCompeticaoCadastrada,
+  deleteCompeticaoCadastrada,
 } from "./db.js";
 import { sugerirClassificacao } from "./ai.js";
 
@@ -321,11 +325,12 @@ async function handleListPessoas(env) {
   return json({ pessoas, papeis: PAPEIS });
 }
 
+// body: { nome, apelidos: ["..."], papeis_padrao: ["comentarista", ...] }
 async function handleCreatePessoa(request, env) {
   const body = await request.json();
   if (!body.nome?.trim()) return json({ error: "nome é obrigatório." }, 400);
 
-  const id = await upsertPessoa(env.DB, body.nome, body.papel_padrao || null);
+  const id = await upsertPessoa(env.DB, body.nome, { apelidos: body.apelidos, papeisPadrao: body.papeis_padrao });
   return json({ id });
 }
 
@@ -333,7 +338,11 @@ async function handleUpdatePessoa(request, env) {
   const body = await request.json();
   if (!body.id || !body.nome?.trim()) return json({ error: "id e nome são obrigatórios." }, 400);
 
-  await updatePessoa(env.DB, body.id, { nome: body.nome.trim(), papelPadrao: body.papel_padrao || null });
+  await updatePessoa(env.DB, body.id, {
+    nome: body.nome.trim(),
+    apelidos: body.apelidos,
+    papeisPadrao: body.papeis_padrao,
+  });
   return json({ ok: true });
 }
 
@@ -342,6 +351,37 @@ async function handleDeletePessoa(request, env) {
   if (!body.id) return json({ error: "id é obrigatório." }, 400);
 
   await deletePessoa(env.DB, body.id);
+  return json({ ok: true });
+}
+
+// ---------- competições cadastradas (lista de referência) ----------
+
+async function handleListCompeticoes(env) {
+  const competicoes = await listCompeticoesCadastradas(env.DB);
+  return json({ competicoes });
+}
+
+async function handleCreateCompeticao(request, env) {
+  const body = await request.json();
+  if (!body.nome?.trim()) return json({ error: "nome é obrigatório." }, 400);
+
+  const id = await createCompeticaoCadastrada(env.DB, body.nome);
+  return json({ id });
+}
+
+async function handleUpdateCompeticao(request, env) {
+  const body = await request.json();
+  if (!body.id || !body.nome?.trim()) return json({ error: "id e nome são obrigatórios." }, 400);
+
+  await updateCompeticaoCadastrada(env.DB, body.id, body.nome);
+  return json({ ok: true });
+}
+
+async function handleDeleteCompeticao(request, env) {
+  const body = await request.json();
+  if (!body.id) return json({ error: "id é obrigatório." }, 400);
+
+  await deleteCompeticaoCadastrada(env.DB, body.id);
   return json({ ok: true });
 }
 
@@ -490,6 +530,18 @@ export default {
       }
       if (url.pathname === "/api/pessoas/delete" && request.method === "POST") {
         return await handleDeletePessoa(request, env);
+      }
+      if (url.pathname === "/api/competicoes" && request.method === "GET") {
+        return await handleListCompeticoes(env);
+      }
+      if (url.pathname === "/api/competicoes" && request.method === "POST") {
+        return await handleCreateCompeticao(request, env);
+      }
+      if (url.pathname === "/api/competicoes/update" && request.method === "POST") {
+        return await handleUpdateCompeticao(request, env);
+      }
+      if (url.pathname === "/api/competicoes/delete" && request.method === "POST") {
+        return await handleDeleteCompeticao(request, env);
       }
       if (url.pathname === "/api/ai/sugerir" && request.method === "POST") {
         return await handleAiSugerir(request, env);

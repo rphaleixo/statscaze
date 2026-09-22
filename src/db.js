@@ -1,5 +1,10 @@
 // Acesso ao banco D1 — equivalente às funções de banco de coletor.py
 
+// Vídeo novo: grava tudo. Vídeo já existente (mapeamento rodado de novo):
+// só atualiza o que pode mudar de fato com o tempo (views, comentários,
+// contagem de chat, quando foi coletado) — título, descrição, duração,
+// tipo e data de publicação de um vídeo já mapeado nunca são sobrescritos,
+// para não desfazer nada.
 export async function upsertVideoMetadata(db, row) {
   await db
     .prepare(
@@ -9,16 +14,9 @@ export async function upsertVideoMetadata(db, row) {
         mensagens_chat, url, coletado_em
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(video_id) DO UPDATE SET
-        canal=excluded.canal,
-        tipo_video=excluded.tipo_video,
-        titulo=excluded.titulo,
-        descricao=excluded.descricao,
-        data_publicacao=excluded.data_publicacao,
-        duracao_segundos=excluded.duracao_segundos,
         views=excluded.views,
         comentarios=excluded.comentarios,
         mensagens_chat=excluded.mensagens_chat,
-        url=excluded.url,
         coletado_em=excluded.coletado_em`
     )
     .bind(
@@ -108,33 +106,100 @@ export async function updateClassificacao(db, videoId, campos) {
 
 // ---------- pessoas (elenco) ----------
 
+function parseJsonArray(text) {
+  if (!text) return [];
+  try {
+    const parsed = JSON.parse(text);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parsePessoaRow(row) {
+  return { ...row, apelidos: parseJsonArray(row.apelidos), papeis_padrao: parseJsonArray(row.papeis_padrao) };
+}
+
 export async function listPessoas(db) {
   const result = await db.prepare(`SELECT * FROM pessoas ORDER BY nome`).all();
-  return result.results;
+  return result.results.map(parsePessoaRow);
 }
 
-export async function upsertPessoa(db, nome, papelPadrao) {
-  const nomeLimpo = nome.trim();
+// Acha uma pessoa já cadastrada cujo nome OU algum apelido bata (sem
+// diferenciar maiúsculas/minúsculas) com o texto informado. É o que evita
+// duplicata: se alguém digitar "Cazé" (apelido), isso resolve para a
+// pessoa "Casimiro Miguel" em vez de criar um cadastro novo.
+export async function resolvePessoaPorNome(db, nomeDigitado) {
+  const nomeLimpo = nomeDigitado.trim();
+  if (!nomeLimpo) return null;
 
-  await db
-    .prepare(`INSERT INTO pessoas (nome, papel_padrao, criado_em) VALUES (?, ?, ?) ON CONFLICT(nome) DO NOTHING`)
-    .bind(nomeLimpo, papelPadrao || null, new Date().toISOString())
+  const porNome = await db.prepare(`SELECT * FROM pessoas WHERE LOWER(nome) = LOWER(?)`).bind(nomeLimpo).first();
+  if (porNome) return parsePessoaRow(porNome);
+
+  const porApelido = await db
+    .prepare(
+      `SELECT p.* FROM pessoas p, json_each(p.apelidos) je
+       WHERE LOWER(je.value) = LOWER(?) LIMIT 1`
+    )
+    .bind(nomeLimpo)
+    .first();
+
+  return porApelido ? parsePessoaRow(porApelido) : null;
+}
+
+// Cria a pessoa se "nome" (ou um apelido já cadastrado) não bater com
+// ninguém; caso já exista, devolve o id da pessoa existente sem
+// sobrescrever os dados dela (apelidos/papéis já curados não se perdem).
+export async function upsertPessoa(db, nome, { apelidos, papeisPadrao } = {}) {
+  const existente = await resolvePessoaPorNome(db, nome);
+  if (existente) return existente.id;
+
+  const result = await db
+    .prepare(`INSERT INTO pessoas (nome, apelidos, papeis_padrao, criado_em) VALUES (?, ?, ?, ?)`)
+    .bind(
+      nome.trim(),
+      JSON.stringify(apelidos || []),
+      JSON.stringify(papeisPadrao || []),
+      new Date().toISOString()
+    )
     .run();
 
-  const row = await db.prepare(`SELECT id FROM pessoas WHERE nome = ?`).bind(nomeLimpo).first();
-  return row.id;
+  return result.meta.last_row_id;
 }
 
-export async function updatePessoa(db, id, { nome, papelPadrao }) {
+export async function updatePessoa(db, id, { nome, apelidos, papeisPadrao }) {
   await db
-    .prepare(`UPDATE pessoas SET nome = ?, papel_padrao = ? WHERE id = ?`)
-    .bind(nome, papelPadrao || null, id)
+    .prepare(`UPDATE pessoas SET nome = ?, apelidos = ?, papeis_padrao = ? WHERE id = ?`)
+    .bind(nome, JSON.stringify(apelidos || []), JSON.stringify(papeisPadrao || []), id)
     .run();
 }
 
 export async function deletePessoa(db, id) {
   await db.prepare(`DELETE FROM participacoes WHERE pessoa_id = ?`).bind(id).run();
   await db.prepare(`DELETE FROM pessoas WHERE id = ?`).bind(id).run();
+}
+
+// ---------- competições conhecidas (lista de referência) ----------
+
+export async function listCompeticoesCadastradas(db) {
+  const result = await db.prepare(`SELECT * FROM competicoes ORDER BY nome`).all();
+  return result.results;
+}
+
+export async function createCompeticaoCadastrada(db, nome) {
+  const result = await db
+    .prepare(`INSERT INTO competicoes (nome, criado_em) VALUES (?, ?) ON CONFLICT(nome) DO NOTHING`)
+    .bind(nome.trim(), new Date().toISOString())
+    .run();
+  return result.meta.last_row_id;
+}
+
+export async function updateCompeticaoCadastrada(db, id, nome) {
+  await db.prepare(`UPDATE competicoes SET nome = ? WHERE id = ?`).bind(nome.trim(), id).run();
+}
+
+export async function deleteCompeticaoCadastrada(db, id) {
+  await db.prepare(`DELETE FROM competicoes WHERE id = ?`).bind(id).run();
 }
 
 // ---------- participações (elenco por vídeo) ----------
@@ -146,7 +211,7 @@ export async function setParticipacoes(db, videoId, participacoes) {
   for (const { nome, papel } of participacoes) {
     if (!nome?.trim() || !papel) continue;
 
-    const pessoaId = await upsertPessoa(db, nome, papel);
+    const pessoaId = await upsertPessoa(db, nome, { papeisPadrao: [papel] });
 
     await db
       .prepare(`INSERT OR IGNORE INTO participacoes (video_id, pessoa_id, papel) VALUES (?, ?, ?)`)
@@ -215,11 +280,19 @@ export async function aplicarClassificacaoSugerida(db, videoId) {
     .run();
 }
 
+// Une a lista de referência cadastrada com o que já apareceu em vídeos
+// (pode ter competição digitada num vídeo que ainda não está na lista
+// de referência).
 export async function getCompeticoesConhecidas(db) {
   const result = await db
-    .prepare(`SELECT DISTINCT competicao FROM videos WHERE competicao IS NOT NULL AND competicao != ''`)
+    .prepare(
+      `SELECT nome FROM competicoes
+       UNION
+       SELECT competicao AS nome FROM videos WHERE competicao IS NOT NULL AND competicao != ''
+       ORDER BY nome`
+    )
     .all();
-  return result.results.map((r) => r.competicao);
+  return result.results.map((r) => r.nome);
 }
 
 export async function getProgramasConhecidos(db) {

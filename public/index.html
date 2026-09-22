@@ -30,18 +30,7 @@
         <label class="checkbox"><input type="checkbox" value="live" checked /> Live</label>
         <label class="checkbox"><input type="checkbox" value="short" checked /> Short</label>
         <label class="checkbox"><input type="checkbox" value="video" checked /> Vídeo normal</label>
-      </section>
-
-      <section>
-        <h2>Etapa 1 — Mapeamento</h2>
-        <p class="hint">Lista os vídeos do período e busca título, duração, views, comentários e chat.</p>
-        <button id="btnMapear" class="primary">Mapear vídeos</button>
-      </section>
-
-      <section>
-        <h2>Etapa 2 — Transcrição</h2>
-        <label class="checkbox"><input id="reprocessar" type="checkbox" /> Reprocessar já transcritos</label>
-        <button id="btnTranscrever" class="primary">Buscar transcrições</button>
+        <p class="hint">Usado tanto para buscar quanto para filtrar o que aparece nas outras abas.</p>
       </section>
     </aside>
 
@@ -53,27 +42,124 @@
       </section>
 
       <nav class="tabs">
-        <button class="tab-btn active" data-tab="videos">Vídeos</button>
+        <button class="tab-btn active" data-tab="mapeamento">Mapeamento</button>
+        <button class="tab-btn" data-tab="videos">Vídeos</button>
+        <button class="tab-btn" data-tab="elenco">Elenco</button>
+        <button class="tab-btn" data-tab="competicoes">Competições</button>
         <button class="tab-btn" data-tab="dashboards">Dashboards</button>
-        <button class="tab-btn" data-tab="enriquecimento">Enriquecimento</button>
       </nav>
 
-      <section id="tab-videos" class="tab-panel active">
+      <section id="tab-mapeamento" class="tab-panel active">
+        <p class="hint">
+          Usa o canal, período e tipo de vídeo escolhidos na barra lateral. Vídeos já buscados
+          antes não são alterados numa nova busca — só views, comentários e contagem de chat são
+          atualizados; título, descrição, duração e classificação continuam como estavam.
+        </p>
+
+        <div class="chart-card">
+          <h4>Etapa 1 — Buscar vídeos novos</h4>
+          <p class="hint">Lista os vídeos do período e busca título, descrição, duração, views, comentários e chat.</p>
+          <button id="btnMapear" class="primary">Mapear vídeos</button>
+        </div>
+
+        <div class="chart-card">
+          <h4>Etapa 2 — Buscar transcrições</h4>
+          <label class="checkbox"><input id="reprocessar" type="checkbox" /> Reprocessar vídeos que já têm transcrição</label>
+          <button id="btnTranscrever" class="primary">Buscar transcrições</button>
+        </div>
+
+        <div class="chart-card">
+          <h4>Etapa 3 — Sugerir classificação via IA</h4>
+          <p class="hint">
+            Usa a IA da própria Cloudflare (Workers AI) para ler título, descrição e transcrição de
+            cada vídeo e sugerir o tipo de conteúdo, a competição/programa, e comparar com a lista de
+            elenco para sugerir quem participou. Tudo fica pendente até você aprovar, na aba "Vídeos".
+          </p>
+          <button id="btnSugerirIA" class="primary">Sugerir para vídeos sem classificação</button>
+        </div>
+      </section>
+
+      <section id="tab-videos" class="tab-panel">
         <div class="panel-header">
           <h3 id="videosCount">0 vídeo(s)</h3>
           <div class="actions">
             <a id="downloadCsv" href="#" class="button">Baixar CSV</a>
           </div>
         </div>
+
+        <p class="hint">
+          Clique nos campos de cada linha para classificar o vídeo (tipo de conteúdo, competição
+          ou programa) e marcar quem participou (com o papel específico naquele vídeo — a mesma
+          pessoa pode ter papéis diferentes em vídeos diferentes). Depois clique em "Salvar".
+        </p>
+
+        <div class="chart-card">
+          <h4>Importar CSV</h4>
+          <p class="hint">
+            Formato: uma linha por pessoa. Colunas: <code>video_id</code>, <code>tipo_conteudo</code>
+            (transmissao/programa/especial, opcional), <code>competicao</code> (opcional),
+            <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (narrador,
+            comentarista, reporter ou apresentador). Repita o <code>video_id</code> em uma linha
+            para cada pessoa do vídeo.
+          </p>
+          <input id="csvImportFile" type="file" accept=".csv" />
+          <button id="btnImportarCsv" class="primary" style="margin-top:10px;">Importar CSV</button>
+          <div id="csvImportStatus" class="status-msg"></div>
+        </div>
+
         <div class="table-wrap">
           <table id="videosTable">
             <thead>
               <tr>
-                <th>Tipo</th><th>Conteúdo</th><th>Título</th><th>Publicação</th><th>Duração</th>
-                <th>Views</th><th>Comentários</th><th>Chat</th><th>Competição/Programa</th>
-                <th>Elenco</th><th>Transcrição</th><th>Link</th>
+                <th>Tipo</th><th>Título</th><th>Publicação</th><th>Duração</th>
+                <th>Views</th><th>Comentários</th><th>Chat</th><th>Transcrição</th><th>Link</th>
+                <th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
+                <th>Elenco do vídeo</th><th></th>
               </tr>
             </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-elenco" class="tab-panel">
+        <p class="hint">
+          Cadastre aqui as pessoas que podem aparecer nos vídeos. Apelidos/outras grafias ajudam a
+          IA (e a busca) a reconhecer que é a mesma pessoa, evitando cadastro duplicado. Os papéis
+          marcados aqui são só um padrão sugerido — o papel de cada participação é sempre definido
+          por vídeo, na aba "Vídeos" (a mesma pessoa pode ter papéis diferentes em vídeos diferentes).
+        </p>
+
+        <div class="pessoa-form">
+          <input id="novaPessoaNome" type="text" placeholder="Nome" />
+          <input id="novaPessoaApelidos" type="text" placeholder="Apelidos (separados por vírgula)" />
+          <div class="papeis-checkboxes" id="novaPessoaPapeis"></div>
+          <button id="btnAdicionarPessoa" class="primary">Adicionar</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="pessoasTable">
+            <thead><tr><th>Nome</th><th>Apelidos</th><th>Papéis padrão (sugestão)</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tab-competicoes" class="tab-panel">
+        <p class="hint">
+          Lista de referência de competições, usada para preencher o campo "Competição" na aba
+          Vídeos (com autocompletar) e para orientar a sugestão da IA a reaproveitar nomes já
+          cadastrados em vez de criar variações.
+        </p>
+
+        <div class="pessoa-form competicao-form">
+          <input id="novaCompeticaoNome" type="text" placeholder="Nome da competição" />
+          <button id="btnAdicionarCompeticao" class="primary">Adicionar</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="competicoesTable">
+            <thead><tr><th>Nome</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -149,67 +235,6 @@
           </div>
 
           <div id="castMemberDetail"></div>
-        </div>
-      </section>
-
-      <section id="tab-enriquecimento" class="tab-panel">
-        <p class="hint">
-          Preencha, por vídeo: tipo de conteúdo (transmissão, programa ou especial), competição
-          ou programa, e quem participou (com o papel de cada um nesse vídeo específico — a
-          mesma pessoa pode ter papéis diferentes em vídeos diferentes).
-        </p>
-
-        <div class="chart-card">
-          <h4>Elenco cadastrado</h4>
-          <p class="hint">Cadastre aqui as pessoas que podem aparecer nos vídeos, com o papel mais comum de cada uma.</p>
-          <div class="pessoa-form">
-            <input id="novaPessoaNome" type="text" placeholder="Nome" />
-            <select id="novaPessoaPapel"></select>
-            <button id="btnAdicionarPessoa" class="primary">Adicionar</button>
-          </div>
-          <div class="table-wrap">
-            <table id="pessoasTable">
-              <thead><tr><th>Nome</th><th>Papel padrão</th><th></th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="chart-card">
-          <h4>Sugerir classificação via IA</h4>
-          <p class="hint">
-            Usa a IA da própria Cloudflare (Workers AI) para ler título, descrição e transcrição de
-            cada vídeo e sugerir o tipo de conteúdo, a competição/programa, e comparar com a lista de
-            elenco para sugerir quem participou. Tudo fica pendente até você aprovar, na tabela abaixo.
-          </p>
-          <button id="btnSugerirIA" class="primary">Sugerir para vídeos sem classificação</button>
-        </div>
-
-        <div class="chart-card">
-          <h4>Importar CSV</h4>
-          <p class="hint">
-            Formato: uma linha por pessoa. Colunas: <code>video_id</code>, <code>tipo_conteudo</code>
-            (transmissao/programa/especial, opcional), <code>competicao</code> (opcional),
-            <code>programa</code> (opcional), <code>nome</code>, <code>papel</code> (narrador,
-            comentarista, reporter ou apresentador). Repita o <code>video_id</code> em uma linha
-            para cada pessoa do vídeo.
-          </p>
-          <input id="csvImportFile" type="file" accept=".csv" />
-          <button id="btnImportarCsv" class="primary" style="margin-top:10px;">Importar CSV</button>
-          <div id="csvImportStatus" class="status-msg"></div>
-        </div>
-
-        <h4>Editar manualmente</h4>
-        <div class="table-wrap">
-          <table id="enrichTable">
-            <thead>
-              <tr>
-                <th>Título</th><th>Tipo de conteúdo</th><th>Competição</th><th>Programa</th>
-                <th>Elenco do vídeo</th><th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
         </div>
       </section>
     </main>

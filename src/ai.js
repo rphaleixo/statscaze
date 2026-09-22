@@ -28,7 +28,19 @@ function extrairJson(texto) {
 // participantes: [{ nome, papel }], só com nomes que baterem com a lista de
 // pessoas já cadastradas (evita a IA inventar gente que não existe no elenco).
 export async function sugerirClassificacao(ai, { titulo, descricao, transcricao, competicoesConhecidas, programasConhecidas, pessoasConhecidas }) {
-  const nomesConhecidos = (pessoasConhecidas || []).map((p) => p.nome);
+  // Cada pessoa pode ter vários apelidos/grafias — todos contam como
+  // "nomes conhecidos" para a IA reconhecer, mas sempre voltam ao nome
+  // canônico (pessoa.nome) na hora de gravar a participação.
+  const nomeCanonicoPorVariante = new Map();
+  const variantesParaExibir = [];
+  for (const pessoa of pessoasConhecidas || []) {
+    nomeCanonicoPorVariante.set(pessoa.nome.toLowerCase(), pessoa.nome);
+    variantesParaExibir.push(pessoa.nome);
+    for (const apelido of pessoa.apelidos || []) {
+      nomeCanonicoPorVariante.set(apelido.toLowerCase(), pessoa.nome);
+      variantesParaExibir.push(`${apelido} (= ${pessoa.nome})`);
+    }
+  }
 
   const prompt = `Você analisa um vídeo de um canal de TV/YouTube esportivo a partir do título, descrição e um trecho da transcrição, e devolve uma classificação em JSON.
 
@@ -41,10 +53,10 @@ Se for "transmissao", identifique a COMPETIÇÃO (ex.: "Brasileirão Série A", 
 
 Se for "programa", identifique o nome do PROGRAMA. Programas já usados neste canal: ${programasConhecidas?.length ? programasConhecidas.join(", ") : "nenhum cadastrado ainda"}.
 
-Depois, veja se alguma destas pessoas já cadastradas no elenco do canal é claramente mencionada no título, descrição ou transcrição, e qual papel ela teve NESTE vídeo (narrador, comentarista, reporter ou apresentador — use "reporter" sem acento). Só inclua pessoas desta lista, nunca invente nomes novos: ${nomesConhecidos.length ? nomesConhecidos.join(", ") : "nenhuma pessoa cadastrada ainda"}.
+Depois, veja se alguma destas pessoas já cadastradas no elenco do canal é claramente mencionada no título, descrição ou transcrição, e qual papel ela teve NESTE vídeo (narrador, comentarista, reporter ou apresentador — use "reporter" sem acento). A lista abaixo mostra "apelido (= nome oficial)" quando a pessoa tem apelido — se reconhecer o apelido no texto, responda com o NOME OFICIAL, não o apelido. Só inclua pessoas desta lista, nunca invente nomes novos: ${variantesParaExibir.length ? variantesParaExibir.join(", ") : "nenhuma pessoa cadastrada ainda"}.
 
 Responda SOMENTE com um objeto JSON, sem nenhum texto antes ou depois, no formato:
-{"tipo_conteudo": "transmissao" | "programa" | "especial" | null, "competicao": "nome ou null", "programa": "nome ou null", "confianca": 0.0 a 1.0, "participantes": [{"nome": "...", "papel": "narrador|comentarista|reporter|apresentador"}]}
+{"tipo_conteudo": "transmissao" | "programa" | "especial" | null, "competicao": "nome ou null", "programa": "nome ou null", "confianca": 0.0 a 1.0, "participantes": [{"nome": "...(nome oficial)", "papel": "narrador|comentarista|reporter|apresentador"}]}
 
 Título: ${titulo || ""}
 Descrição: ${truncar(descricao, 800)}
@@ -63,12 +75,11 @@ Trecho da transcrição: ${truncar(transcricao, MAX_TRANSCRICAO_CHARS)}`;
     return { erro: "A IA não devolveu uma resposta interpretável." };
   }
 
-  const nomesConhecidosLower = new Set(nomesConhecidos.map((n) => n.toLowerCase()));
   const papeisValidos = new Set(["narrador", "comentarista", "reporter", "apresentador"]);
 
   const participantes = (Array.isArray(parsed.participantes) ? parsed.participantes : [])
-    .filter((p) => p?.nome && nomesConhecidosLower.has(String(p.nome).toLowerCase()) && papeisValidos.has(p.papel))
-    .map((p) => ({ nome: nomesConhecidos.find((n) => n.toLowerCase() === p.nome.toLowerCase()), papel: p.papel }));
+    .filter((p) => p?.nome && nomeCanonicoPorVariante.has(String(p.nome).toLowerCase()) && papeisValidos.has(p.papel))
+    .map((p) => ({ nome: nomeCanonicoPorVariante.get(p.nome.toLowerCase()), papel: p.papel }));
 
   return {
     tipoConteudo: ["transmissao", "programa", "especial"].includes(parsed.tipo_conteudo) ? parsed.tipo_conteudo : null,
